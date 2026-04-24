@@ -1,6 +1,29 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { supabase } from '../supabaseClient';
 
-const Login = ({ onBack, onSignUp, onLogin }) => {
+const Login = ({ onBack, onSignUp }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+    }
+    // Session change will be handled by App.jsx listener
+  };
+
   return (
     <div className="bg-warm-cream min-h-screen flex flex-col text-primary selection:bg-dragonfruit-magenta selection:text-pure-white overflow-x-hidden">
       {/* TopAppBar */}
@@ -27,7 +50,14 @@ const Login = ({ onBack, onSignUp, onLogin }) => {
             <h1 className="font-card-heading text-card-heading text-primary">Log In</h1>
             <p className="font-body-standard text-body-standard text-warm-charcoal text-center">Access your craft workspace.</p>
           </div>
-          <form className="flex flex-col gap-6" onSubmit={(e) => e.preventDefault()}>
+          <form className="flex flex-col gap-6" onSubmit={handleLogin}>
+            {/* Error Message */}
+            {error && (
+              <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded text-sm font-monospace-ui">
+                {error}
+              </div>
+            )}
+            
             {/* Email Input */}
             <div className="flex flex-col gap-2">
               <label className="font-label-uppercase text-label-uppercase text-warm-charcoal text-left" htmlFor="email">Email</label>
@@ -37,6 +67,9 @@ const Login = ({ onBack, onSignUp, onLogin }) => {
                   id="email" 
                   placeholder="name@university.edu" 
                   type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
                 />
               </div>
             </div>
@@ -52,17 +85,20 @@ const Login = ({ onBack, onSignUp, onLogin }) => {
                   id="password" 
                   placeholder="••••••••" 
                   type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
                 />
               </div>
             </div>
             {/* CTA Button */}
             <button 
-              onClick={onLogin}
-              className="mt-4 w-full h-14 bg-primary text-on-primary font-button text-button rounded-full hover:rotate-[-4deg] hover:-translate-y-2 hover:bg-dragonfruit-magenta hover:shadow-[rgb(0,0,0)_-7px_7px] transition-all duration-300 flex items-center justify-center gap-2" 
+              disabled={loading}
+              className="mt-4 w-full h-14 bg-primary text-on-primary font-button text-button rounded-full hover:rotate-[-4deg] hover:-translate-y-2 hover:bg-dragonfruit-magenta hover:shadow-[rgb(0,0,0)_-7px_7px] transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" 
               type="submit"
             >
-              Log In
-              <span className="material-symbols-outlined text-[20px]">arrow_forward</span>
+              {loading ? 'Logging in...' : 'Log In'}
+              {!loading && <span className="material-symbols-outlined text-[20px]">arrow_forward</span>}
             </button>
           </form>
           {/* Divider */}
