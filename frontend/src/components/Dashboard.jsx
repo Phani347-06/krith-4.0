@@ -296,6 +296,16 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements }
       onPointerLeave={handlePointerUp}
       className="bg-warm-cream bg-grid-pattern w-screen h-screen font-body-standard text-primary overflow-hidden relative select-none"
     >
+      {/* WhatsApp-style Background Overlay */}
+      <div 
+        className="absolute inset-0 pointer-events-none mix-blend-multiply opacity-[0.06]" 
+        style={{ 
+          backgroundImage: "url('/wa-bg.png')",
+          backgroundRepeat: 'repeat',
+          backgroundSize: '400px'
+        }} 
+      />
+
       <header className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-10 py-6 bg-white/80 backdrop-blur-md border-b-2 border-stone-100">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center">
