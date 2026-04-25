@@ -297,14 +297,81 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
   useEffect(() => {
     if (!rlStats.mastery) return;
 
-    setCurriculum(prev => prev.map(node => {
-      // Find matching mastery record for this node ID
-      const record = rlStats.mastery.find(m => m.topic_id === node.id);
-      if (record && record.score >= 0.7) {
-        return { ...node, status: 'mastered', progress: 100 };
-      }
-      return node;
-    }));
+    setCurriculum(prev => {
+      let nextCurriculum = [...prev];
+      
+      // 1. Update mastered status for core nodes
+      nextCurriculum = nextCurriculum.map(node => {
+        const record = rlStats.mastery.find(m => m.topic_id === node.id);
+        if (record && record.score >= 0.7) {
+          return { ...node, status: 'mastered', progress: 100 };
+        }
+        return node;
+      });
+      
+      // 2. Handle Chatbot-triggered Revision Quests
+      rlStats.mastery.forEach(record => {
+        const coreNode = nextCurriculum.find(n => n.id === record.topic_id && n.track_type === 'core');
+        if (!coreNode) return;
+        
+        const revisionNodeId = 1000 + record.topic_id;
+        const hasExistingRevision = nextCurriculum.some(n => n.id === revisionNodeId);
+        
+        if (record.score < 0.5) {
+          // Add revision quest if it doesn't exist
+          if (!hasExistingRevision) {
+            const revisionNode = {
+              id: revisionNodeId,
+              subject: coreNode.subject,
+              chapter: "Revision",
+              sub_chapter: "Chatbot Insight",
+              topic_name: `Remediation: ${coreNode.topic_name}`,
+              difficulty_level: 'easy',
+              track_type: 'side_quest',
+              status: 'in_progress',
+              progress: 0,
+              xp_reward: 50,
+              position: { x: coreNode.position.x + 800, y: coreNode.position.y },
+              prerequisite_topic_id: record.topic_id,
+              modules: [{
+                title: `Review Chat Concepts: ${coreNode.topic_name}`,
+                description: `Krith noticed you asked about ${coreNode.topic_name}. Complete this quick revision to strengthen your neural pathways!`,
+                questions: [{
+                  type: "mcq",
+                  question: `You recently asked Krith about ${coreNode.topic_name}. Are you ready to review the core concepts?`,
+                  options: ["Yes, let's recalibrate!", "Not yet"],
+                  correct: 0,
+                  explanation: "Recalibration initiated."
+                }]
+              }]
+            };
+            
+            // Point downstream nodes to the new revision node and lock them
+            nextCurriculum = nextCurriculum.map(n => {
+              if (n.prerequisite_topic_id === record.topic_id) {
+                return { ...n, prerequisite_topic_id: revisionNodeId, status: 'locked' };
+              }
+              return n;
+            });
+            
+            nextCurriculum.push(revisionNode);
+          }
+        } else {
+          // If score >= 0.5, silently remove the revision quest if it exists
+          if (hasExistingRevision) {
+            nextCurriculum = nextCurriculum.filter(n => n.id !== revisionNodeId);
+            nextCurriculum = nextCurriculum.map(n => {
+              if (n.prerequisite_topic_id === revisionNodeId) {
+                return { ...n, prerequisite_topic_id: record.topic_id };
+              }
+              return n;
+            });
+          }
+        }
+      });
+      
+      return nextCurriculum;
+    });
   }, [rlStats.mastery]);
 
   // CLOSE STATS ON CLICK OUTSIDE
