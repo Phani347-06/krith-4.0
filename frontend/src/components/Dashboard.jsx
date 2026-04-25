@@ -5,50 +5,104 @@ import LessonOverlay from './LessonOverlay';
 import SurvivalOverlay from './SurvivalOverlay';
 import ChatbotPanel from './ChatbotPanel';
 
-// XP per question type — single source of truth (matches LessonOverlay)
 const XP_RULES = { mcq: 20, fill_blank: 30, coding: 50 };
 const calcModuleXP = (mod) =>
   (mod.questions || []).reduce((sum, q) => sum + (XP_RULES[q.type || q.question_type] || 20), 0);
 
+const MOCK_PROFILES = {
+  NOVICE: {
+    id: 1,
+    name: "The Novice Student",
+    xp: 0,
+    level: 1,
+    completed: [],
+    unlockedSideQuests: []
+  },
+  INTERMEDIATE: {
+    id: 2,
+    name: "The Intermediate Student",
+    xp: 3500,
+    level: 18,
+    completed: [
+      "1:1.1 What is Programming?", "1:1.2 Variables", "1:1.3 Data Types", "1:1.4 Input / Output",
+      "2:2.1 Conditions (if-else)", "2:2.2 Loops (for, while)", "2:2.3 Loop Practice",
+      "3:3.1 Functions", "3:3.2 Parameters"
+    ],
+    unlockedSideQuests: [5]
+  },
+  ADVANCED: {
+    id: 3,
+    name: "The Advanced Student",
+    xp: 7500,
+    level: 38,
+    completed: [
+      "1:1.1 What is Programming?", "1:1.2 Variables", "1:1.3 Data Types", "1:1.4 Input / Output",
+      "2:2.1 Conditions (if-else)", "2:2.2 Loops (for, while)", "2:2.3 Loop Practice",
+      "3:3.1 Functions", "3:3.2 Parameters",
+      "4:4.1 Lists",
+      "5:5.1 HTML Structure", "5:5.2 HTML Tags & Elements",
+      "6:6.1 CSS Selectors", "6:6.2 Box Model & Layout",
+      "7:7.1 SELECT Queries", "7:7.2 INSERT & UPDATE"
+    ],
+    unlockedSideQuests: [5, 6, 7]
+  }
+};
+
 const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, onViewParentDashboard }) => {
+  // ── 1. ALL STATE & REFS AT THE TOP ────────────────────────────────────────
+  const containerRef = useRef(null);
+  const statsRef = useRef(null);
+  const minimapRef = useRef(null);
+  const dragStartPos = useRef({ x: 0, y: 0 });
+
+  const [currentProfile, setCurrentProfile] = useState("NOVICE");
+  const [scale, setScale] = useState(0.85);
+  const [alert, setAlert] = useState(null);
+  const videoRef = useRef(null);
+
+  // Force play background video
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.play().catch(err => {
+        console.warn("Autoplay was prevented, waiting for user interaction:", err);
+      });
+    }
+  }, []);
+  const [selectedNode, setSelectedNode] = useState(null);
+  const [showStats, setShowStats] = useState(false);
+  const [activeLesson, setActiveLesson] = useState(null);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isGeneratingLesson, setIsGeneratingLesson] = useState(false);
+  const [generatingModuleTitle, setGeneratingModuleTitle] = useState("");
+  const [isSurvivalModeOpen, setIsSurvivalModeOpen] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isRecalibrating, setIsRecalibrating] = useState(false);
+  const [failedQuestions, setFailedQuestions] = useState({}); // { nodeId: [questionIndices] }
+
+  // Stats & Mastery State
+  const [userStats, setUserStats] = useState(() => {
+    try {
+      const saved = localStorage.getItem('cortexai_userstats_v2');
+      return saved ? JSON.parse(saved) : { xp: 0, level: 1, streak: 0 };
+    } catch { return { xp: 0, level: 1, streak: 0 }; }
+  });
+
+  const [completedSubtopics, setCompletedSubtopics] = useState(() => {
+    try {
+      const saved = localStorage.getItem('cortexai_completed_subtopics_v2');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch { return new Set(); }
+  });
+
+  const [rlStats, setRlStats] = useState({ xp: 0, rank: "Novice", current_level: 1 });
+
+  // Curriculum State Initialization
   const [curriculum, setCurriculum] = useState(() => {
     try {
-      // Restore mastered status from persisted completedSubtopics so that
-      // the unlock chain (isNodeVisible) works correctly after a page refresh
       const saved = localStorage.getItem('cortexai_completed_subtopics_v2');
       const completed = saved ? new Set(JSON.parse(saved)) : new Set();
-      // Also restore XP-unlocked side quests
       const unlockedSideQuests = JSON.parse(localStorage.getItem('cortexai_unlocked_sidequests') || '[]');
-      return initialData.map(node => {
-        if (node.track_type === 'side_quest') {
-          const allDone = node.modules.every(m => completed.has(`${node.id}:${m.title}`));
-          if (allDone) return { ...node, status: 'mastered', progress: 100 };
-          if (unlockedSideQuests.includes(node.id)) return { ...node, status: 'in_progress' };
-          return node; // stays locked
-        }
-        const allDone = node.modules.every(m => completed.has(`${node.id}:${m.title}`));
-        return allDone ? { ...node, status: 'mastered', progress: 100 } : node;
-      });
-    } catch {
-      return initialData;
-    }
-  });
-  const [scale, setScale] = useState(0.65);
 
-  // Center on the first non-mastered core node on initial load
-  const getInitialPos = (curriculum) => {
-    const target = curriculum.find(n => n.track_type === 'core' && n.status !== 'mastered')
-      || curriculum[0];
-    return {
-      x: window.innerWidth / 2 - (target.position.x * 0.65),
-      y: window.innerHeight / 2 - (target.position.y * 0.65),
-    };
-  };
-  const initCurriculum = (() => {
-    try {
-      const saved = localStorage.getItem('cortexai_completed_subtopics_v2');
-      const completed = saved ? new Set(JSON.parse(saved)) : new Set();
-      const unlockedSideQuests = JSON.parse(localStorage.getItem('cortexai_unlocked_sidequests') || '[]');
       const firstPass = initialData.map(node => {
         const allDone = node.modules.every(m => completed.has(`${node.id}:${m.title}`));
         return allDone ? { ...node, status: 'mastered', progress: 100 } : node;
@@ -61,40 +115,116 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
           const prereq = firstPass.find(n => n.id === node.prerequisite_topic_id);
           if (prereq && prereq.status === 'mastered') return { ...node, status: 'in_progress' };
         }
+        // First core node is unlocked by default
+        if (node.id === 1 && node.status !== 'mastered') return { ...node, status: 'in_progress' };
         return node;
       });
     } catch { return initialData; }
-  })();
-  const initPos = getInitialPos(initCurriculum);
-  const [x, setX] = useState(initPos.x);
-  const [y, setY] = useState(initPos.y);
-  const containerRef = useRef(null);
-  const [alert, setAlert] = useState(null);
-  const [selectedNode, setSelectedNode] = useState(null);
-  const [showStats, setShowStats] = useState(false);
-  const statsRef = useRef(null);
-  const [activeLesson, setActiveLesson] = useState(null);
-  const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isGeneratingLesson, setIsGeneratingLesson] = useState(false);
-  const [generatingModuleTitle, setGeneratingModuleTitle] = useState("");
-
-  // v2 keys force a clean reset (old scores wiped)
-  const [userStats, setUserStats] = useState(() => {
-    try {
-      const saved = localStorage.getItem('cortexai_userstats_v2');
-      return saved ? JSON.parse(saved) : { xp: 0, level: 1, streak: 0 };
-    } catch {
-      return { xp: 0, level: 1, streak: 0 };
-    }
   });
 
+  // Position State
+  const [x, setX] = useState(0);
+  const [y, setY] = useState(0);
+
+  // Set initial position based on curriculum
+  useEffect(() => {
+    const target = curriculum.find(n => n.track_type === 'core' && n.status !== 'mastered') || curriculum[0];
+    if (target) {
+      setX(window.innerWidth / 2 - (target.position.x * 0.85));
+      setY(window.innerHeight / 2 - (target.position.y * 0.85));
+    }
+  }, []); // Only once on mount
+
+  // ── 2. PERSISTENCE EFFECTS ──────────────────────────────────────────────
+  useEffect(() => {
+    localStorage.setItem('cortexai_userstats_v2', JSON.stringify(userStats));
+  }, [userStats]);
+
+  useEffect(() => {
+    localStorage.setItem('cortexai_completed_subtopics_v2', JSON.stringify([...completedSubtopics]));
+  }, [completedSubtopics]);
+
+  // ── 3. HANDLERS ────────────────────────────────────────────────────────
+  const handleProfileSwitch = (profileKey) => {
+    const profile = MOCK_PROFILES[profileKey];
+    if (!profile) return;
+
+    setIsRecalibrating(true);
+    setCurrentProfile(profileKey);
+
+    // Give the UI a frame to show the loader
+    setTimeout(() => {
+      // 1. Update Completed Subtopics
+      const newCompleted = new Set(profile.completed);
+      setCompletedSubtopics(newCompleted);
+      localStorage.setItem('cortexai_completed_subtopics_v2', JSON.stringify([...newCompleted]));
+
+      // 2. Update Side Quests
+      localStorage.setItem('cortexai_unlocked_sidequests', JSON.stringify(profile.unlockedSideQuests));
+
+      // 3. Update User Stats
+      const newStats = { xp: profile.xp, level: profile.level, streak: 3 };
+      setUserStats(newStats);
+      localStorage.setItem('cortexai_userstats_v2', JSON.stringify(newStats));
+
+      // 4. Recalculate Curriculum Map
+      const firstPass = initialData.map(node => {
+        const allDone = node.modules.every(m => newCompleted.has(`${node.id}:${m.title}`));
+        return allDone ? { ...node, status: 'mastered', progress: 100 } : { ...node, status: 'locked', progress: 0 };
+      });
+
+      const secondPass = firstPass.map(node => {
+        if (node.status === 'mastered') return node;
+        if (node.track_type === 'side_quest' && profile.unlockedSideQuests.includes(node.id)) return { ...node, status: 'in_progress' };
+        if (node.prerequisite_topic_id) {
+          const prereq = firstPass.find(n => n.id === node.prerequisite_topic_id);
+          if (prereq && prereq.status === 'mastered') return { ...node, status: 'in_progress' };
+        }
+        if (node.id === 1 && node.status !== 'mastered') return { ...node, status: 'in_progress' };
+        return node;
+      });
+
+      setCurriculum(secondPass);
+
+      const startNode = secondPass.find(n => n.status === 'in_progress') || secondPass[0];
+      setX(window.innerWidth / 2 - (startNode.position.x * scale));
+      setY(window.innerHeight / 2 - (startNode.position.y * scale));
+
+      // Snap the map immediately, then allow animations again
+      setTimeout(() => setIsRecalibrating(false), 300);
+    }, 100);
+  };
+
   // Fetch RL Stats from backend
-  const [rlStats, setRlStats] = useState({ xp: 0, rank: "Novice", current_level: 1 });
-  const [isSurvivalModeOpen, setIsSurvivalModeOpen] = useState(false);
+
+
+  const handleRecenter = () => {
+    const target = curriculum.find(n => n.track_type === 'core' && n.status !== 'mastered') || curriculum[0];
+    if (target) {
+      // Account for the 96px sidebar (w-24) to center in the visible area
+      const centerX = 96 + (window.innerWidth - 96) / 2;
+      const centerY = window.innerHeight / 2;
+      setX(centerX - (target.position.x * 0.85));
+      setY(centerY - (target.position.y * 0.85));
+      setScale(0.85);
+    }
+  };
+
+  const jumpToNode = (nodeId) => {
+    const target = curriculum.find(n => n.id === nodeId);
+    if (target) {
+      const centerX = 96 + (window.innerWidth - 96) / 2;
+      const centerY = window.innerHeight / 2;
+      setX(centerX - (target.position.x * 0.85));
+      setY(centerY - (target.position.y * 0.85));
+      setScale(0.85);
+    }
+  };
 
   const fetchRLStats = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/rl/student-progress/1');
+      const studentId = MOCK_PROFILES[currentProfile].id;
+      const res = await fetch(`http://localhost:8000/api/rl/student-progress/${studentId}`);
       if (res.ok) {
         const data = await res.json();
         setRlStats(data);
@@ -107,7 +237,7 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
         // Backwards-sync from backend to frontend localStorage
         let modified = false;
         const newCompleted = new Set(completedSubtopics);
-        
+
         data.mastery?.forEach(m => {
           if (m.score >= 0.99) { // Mastered
             const node = initialData.find(n => n.id === m.topic_id);
@@ -122,11 +252,11 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
             }
           }
         });
-        
+
         if (modified) {
           setCompletedSubtopics(newCompleted);
           localStorage.setItem('cortexai_completed_subtopics_v2', JSON.stringify([...newCompleted]));
-          
+
           const firstPass = initialData.map(node => {
             const allDone = node.modules.every(m => newCompleted.has(`${node.id}:${m.title}`));
             return allDone ? { ...node, status: 'mastered', progress: 100 } : node;
@@ -142,7 +272,7 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
             }
             return node;
           });
-          
+
           setCurriculum(secondPass);
         }
       }
@@ -152,8 +282,12 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
   };
 
   useEffect(() => {
-    fetchRLStats();
-  }, [isSurvivalModeOpen]); // Refresh stats when closing survival mode
+    // Only fetch from real backend if we are on the default Novice profile
+    // Otherwise, the mock data will be overwritten by student 1's real stats
+    if (currentProfile === "NOVICE") {
+      fetchRLStats();
+    }
+  }, [isSurvivalModeOpen, currentProfile]); // Refresh stats when closing survival mode or switching profiles
 
   useEffect(() => {
     localStorage.setItem('cortexai_userstats_v2', JSON.stringify(userStats));
@@ -188,21 +322,22 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
     };
   }, [showStats]);
 
-  // Track which subtopics have been completed — v2 key resets on deploy
-  const [completedSubtopics, setCompletedSubtopics] = useState(() => {
-    try {
-      const saved = localStorage.getItem('cortexai_completed_subtopics_v2');
-      return saved ? new Set(JSON.parse(saved)) : new Set();
-    } catch {
-      return new Set();
+
+
+  const handleSubtopicComplete = (nodeId, moduleTitle, earnedXP = 0, results = []) => {
+    // Record failures for revision path
+    if (results && results.length > 0) {
+      const wrongIndices = results.map((r, i) => r.isCorrect ? null : i).filter(i => i !== null);
+      if (wrongIndices.length > 0) {
+        setFailedQuestions(prev => {
+          const modIndex = curriculum.find(n => n.id === nodeId)?.modules.findIndex(m => m.title === moduleTitle);
+          return {
+            ...prev,
+            [nodeId]: [...(prev[nodeId] || []), modIndex]
+          };
+        });
+      }
     }
-  });
-
-  useEffect(() => {
-    localStorage.setItem('cortexai_completed_subtopics_v2', JSON.stringify([...completedSubtopics]));
-  }, [completedSubtopics]);
-
-  const handleSubtopicComplete = (nodeId, moduleTitle, earnedXP = 0) => {
     const node = curriculum.find(n => n.id === nodeId);
     if (!node) return;
 
@@ -233,8 +368,6 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
     // 2. Add XP to user stats immediately + update streak
     setUserStats(prev => {
       const newXP = prev.xp + earnedXP;
-
-      // Streak logic: increment once per calendar day
       const today = new Date().toDateString();
       const lastActive = localStorage.getItem('cortexai_last_active');
       let newStreak = prev.streak || 0;
@@ -244,37 +377,72 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
         newStreak = (lastActive === yesterday.toDateString()) ? newStreak + 1 : 1;
         localStorage.setItem('cortexai_last_active', today);
       }
-
-      return {
-        ...prev,
-        xp: newXP,
-        level: Math.floor(newXP / 200) + 1,
-        streak: newStreak
-      };
+      return { ...prev, xp: newXP, level: Math.floor(newXP / 200) + 1, streak: newStreak };
     });
 
+    // Update curriculum for Revision Path (RL Logic)
+    const hasFailures = results.some(r => !r.isCorrect);
 
-    if (allDone) {
-      // Mark entire level as mastered, unlock next level
-      const updatedCurriculum = curriculum.map(n => {
-        if (n.id === nodeId) return { ...n, status: 'mastered', progress: 100 };
-        if (n.prerequisite_topic_id === nodeId && n.status === 'locked') return { ...n, status: 'in_progress' };
-        return n;
-      });
-      setCurriculum(updatedCurriculum);
-      setActiveLesson(null);
-      setSelectedNode(null);
+    setCurriculum(prev => {
+      let nextCurriculum = [...prev];
 
-      // Navigate map to next level
-      const nextNode = updatedCurriculum.find(
-        n => n.prerequisite_topic_id === nodeId && n.track_type === 'core'
-      );
-      if (nextNode) {
-        setX(window.innerWidth / 2 - (nextNode.position.x * scale));
-        setY(window.innerHeight / 2 - (nextNode.position.y * scale));
+      if (hasFailures) {
+        const revisionNodeId = 1000 + nodeId;
+        const revisionNode = {
+          id: revisionNodeId,
+          topic_name: `Remediation: ${node.topic_name}`,
+          track_type: 'side_quest',
+          difficulty_level: 'Medium',
+          status: 'in_progress',
+          progress: 0,
+          xp_reward: 50,
+          position: { x: node.position.x + 300, y: node.position.y - 150 },
+          prerequisite_topic_id: nodeId,
+          modules: [{
+            title: `Fix Mistakes: ${moduleTitle}`,
+            questions: node.modules.find(m => m.title === moduleTitle).questions,
+            theory: `### ADAPTIVE REMEDIATION\nThe RL engine has detected a gap in your understanding. You must clear this quest to unlock the next module.`
+          }]
+        };
+
+        nextCurriculum = nextCurriculum.map(n => {
+          // Block the next core node
+          if (n.prerequisite_topic_id === nodeId && n.track_type === 'core') {
+            return { ...n, prerequisite_topic_id: revisionNodeId, status: 'locked' };
+          }
+          // Update current node progress but don't master it yet
+          if (n.id === nodeId) {
+            return { ...n, status: 'in_progress', progress: progressPercent * 100 };
+          }
+          return n;
+        }).concat(revisionNode);
+
+        setAlert("PATH RECALIBRATED: REMEDIATION QUEST INJECTED");
+        setTimeout(() => setAlert(null), 3000);
+      } else {
+        // Successful completion logic
+        nextCurriculum = nextCurriculum.map(n => {
+          if (n.id === nodeId) {
+            return { ...n, status: allDone ? 'mastered' : n.status, progress: progressPercent * 100 };
+          }
+          // If this was a prerequisite for something locked, unlock it
+          if (allDone && n.prerequisite_topic_id === nodeId && n.status === 'locked') {
+            return { ...n, status: 'in_progress' };
+          }
+          return n;
+        });
+
+        if (allDone) {
+          setActiveLesson(null);
+          setSelectedNode(null);
+        }
       }
-    } else {
-      // Auto-open the next unfinished subtopic in this level
+
+      return nextCurriculum;
+    });
+
+    // Auto-open the next unfinished subtopic in this level IF this one was passed
+    if (!hasFailures) {
       const currentIndex = node.modules.findIndex(m => m.title === moduleTitle);
       const nextMod = node.modules[currentIndex + 1];
       if (nextMod) {
@@ -283,6 +451,24 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
         setActiveLesson(null);
       }
     }
+  };
+
+  const handleUnlockSideQuest = (nodeId) => {
+    const node = curriculum.find(n => n.id === nodeId);
+    if (!node) return;
+
+    if (userStats.xp < node.xp_required) {
+      setAlert("INSUFFICIENT XP TO BREAK THIS SEAL");
+      setTimeout(() => setAlert(null), 2000);
+      return;
+    }
+
+    setUserStats(prev => ({ ...prev, xp: prev.xp - node.xp_required }));
+    setCurriculum(prev => prev.map(n =>
+      n.id === nodeId ? { ...n, status: 'in_progress' } : n
+    ));
+    setAlert(`SEAL BROKEN: ${node.topic_name} ACQUIRED`);
+    setTimeout(() => setAlert(null), 3000);
   };
 
   const handleStartModule = async (node, mod) => {
@@ -325,8 +511,7 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
     }
   };
 
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStartPos = useRef({ x: 0, y: 0 });
+
 
   const handlePointerDown = (e) => {
     setIsDragging(true);
@@ -335,8 +520,10 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
 
   const handlePointerMove = (e) => {
     if (!isDragging) return;
-    setX(e.clientX - dragStartPos.current.x);
-    setY(e.clientY - dragStartPos.current.y);
+    const dx = e.clientX - dragStartPos.current.x - x;
+    const dy = e.clientY - dragStartPos.current.y - y;
+    setX(x + dx * 0.85);
+    setY(y + dy * 0.85);
   };
 
   const handlePointerUp = () => setIsDragging(false);
@@ -354,7 +541,7 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
       const { scale: s, x: cx, y: cy, selectedNode: sn } = wheelStateRef.current;
       if (sn) return;
       e.preventDefault();
-      const zoomSpeed = 0.008;
+      const zoomSpeed = 0.005;
       const minScale = 0.3;
       const maxScale = 1.5;
       const delta = -e.deltaY;
@@ -374,30 +561,15 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
   }, []); // registered ONCE — no stale-closure gap
 
   const isNodeVisible = (node) => {
-    if (node.track_type === 'side_quest') return true; // always shown, locked by XP
-    if (!node.prerequisite_topic_id) return true;
-    const prereq = curriculum.find(n => n.id === node.prerequisite_topic_id);
-    return prereq && prereq.status === 'mastered';
+    return true; // All modules are visible on the map, locked ones will show as locked
   };
 
-  const handleUnlockSideQuest = (nodeId) => {
-    const node = curriculum.find(n => n.id === nodeId);
-    if (!node || node.track_type !== 'side_quest') return;
-    if (userStats.xp < node.xp_required) return;
-    // Deduct XP and unlock
-    setUserStats(prev => ({ ...prev, xp: prev.xp - node.xp_required }));
-    const updatedCurriculum = curriculum.map(n =>
-      n.id === nodeId ? { ...n, status: 'in_progress' } : n
-    );
-    setCurriculum(updatedCurriculum);
-    const prev = JSON.parse(localStorage.getItem('cortexai_unlocked_sidequests') || '[]');
-    localStorage.setItem('cortexai_unlocked_sidequests', JSON.stringify([...prev, nodeId]));
-  };
 
-  const minimapRef = useRef(null);
-  const minimapScale = 0.022;
-  const miniOffsetX = 20;
-  const miniOffsetY = 60;
+
+
+  const minimapScale = 0.012;
+  const miniOffsetX = 10;
+  const miniOffsetY = 45;
 
   const miniViewportWidth = window.innerWidth / scale * minimapScale;
   const miniViewportHeight = window.innerHeight / scale * minimapScale;
@@ -424,7 +596,6 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
     if (clickedNode && isNodeVisible(clickedNode)) {
       setSelectedNode(clickedNode);
     }
-
     setX(window.innerWidth / 2 - (clickX * scale));
     setY(window.innerHeight / 2 - (clickY * scale));
   };
@@ -435,18 +606,22 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
-      className="bg-warm-cream bg-grid-pattern w-screen h-screen font-body-standard text-primary overflow-hidden relative select-none"
+      className="w-screen h-screen font-body-standard text-primary overflow-hidden relative select-none"
     >
-      {/* Doodle Background Overlay */}
-      <div
-        className="absolute inset-0 pointer-events-none opacity-[0.15] animate-drift"
-        style={{
-          backgroundRepeat: 'repeat',
-          backgroundSize: '500px'
-        }}
-      />
+      <video
+        ref={videoRef}
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="fixed inset-0 w-full h-full object-cover opacity-10 -z-10 pointer-events-none"
+      >
+        <source src="/bg.mp4" type="video/mp4" />
+      </video>
 
-      <header className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-10 py-6 bg-white/80 backdrop-blur-md border-b-2 border-stone-100">
+
+
+      <header className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-10 py-6 bg-warm-cream/80 backdrop-blur-md border-b-2 border-stone-200/50">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center">
             <span className="material-symbols-outlined text-white">bolt</span>
@@ -455,6 +630,19 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
         </div>
 
         <div className="flex items-center gap-6">
+          <div className="flex items-center bg-white border-2 border-black rounded-2xl p-1 px-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+            <span className="material-symbols-outlined text-stone-400 text-sm ml-2">person</span>
+            <select
+              value={currentProfile}
+              onChange={(e) => handleProfileSwitch(e.target.value)}
+              className="bg-transparent border-none text-[10px] font-black uppercase tracking-widest p-2 outline-none cursor-pointer"
+            >
+              {Object.keys(MOCK_PROFILES).map(key => (
+                <option key={key} value={key}>{MOCK_PROFILES[key].name}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="relative" ref={statsRef}>
             <button
               onClick={onViewAchievements}
@@ -525,35 +713,9 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
         </div>
       </header>
 
-      {/* Recommended Quest Banner */}
-      <div className="fixed top-28 left-1/2 -translate-x-1/2 z-[45] w-full max-w-lg px-4">
-        <motion.div
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          onClick={() => setIsSurvivalModeOpen(true)}
-          className="bg-black border-2 border-matcha-500 rounded-2xl p-4 shadow-[0_0_30px_rgba(7,138,82,0.2)] cursor-pointer group hover:bg-matcha-900/10 transition-all"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-matcha-500 flex items-center justify-center">
-                <span className="material-symbols-outlined text-white font-black">radar</span>
-              </div>
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-[0.3em] text-matcha-500">Recommended Quest</p>
-                <h4 className="text-sm font-black text-white uppercase tracking-tight">
-                  Clear {rlStats.mastery?.find(m => m.score < 0.7)?.topic_id === 1 ? "Variables" : "Next Topic"} Mission
-                </h4>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 text-matcha-500">
-              <span className="text-[10px] font-black uppercase tracking-widest group-hover:mr-2 transition-all underline decoration-2">Launch Mission</span>
-              <span className="material-symbols-outlined">chevron_right</span>
-            </div>
-          </div>
-        </motion.div>
-      </div>
 
-      <aside className="fixed top-[94px] bottom-0 left-0 w-24 bg-white/80 backdrop-blur-md border-r-2 border-stone-100 z-50 flex flex-col items-center py-10 gap-10">
+
+      <aside className="fixed top-[94px] bottom-0 left-0 w-24 bg-warm-cream/80 backdrop-blur-md border-r-2 border-stone-200/50 z-50 flex flex-col items-center py-10 gap-10">
         {['Curriculum', 'Stats', 'Achievements', 'Settings'].map((item, idx) => (
           <div key={item} className="relative group flex flex-col items-center gap-2">
             <motion.a
@@ -691,280 +853,266 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
       </AnimatePresence>
 
       <main onPointerDown={handlePointerDown} className="absolute inset-0 overflow-hidden cursor-grab active:cursor-grabbing z-0 pl-24">
-        <div className="fixed top-[110px] right-10 z-30 w-64 h-52 bg-black/95 backdrop-blur-xl rounded-[32px] border-4 border-white/20 shadow-2xl overflow-hidden hidden lg:block">
-          <div className="absolute top-4 left-0 right-0 flex items-center justify-center gap-2 z-20"><div className="w-2 h-2 rounded-full bg-matcha-500 animate-pulse shadow-[0_0_10px_#84e7a5]" /><span className="text-[9px] font-black uppercase tracking-[0.4em] text-white/70">Tactical Radar</span></div>
-          <div ref={minimapRef} onClick={handleMinimapInteraction} className="relative w-full h-full cursor-crosshair">
-            <div style={{ transform: `translate(${miniOffsetX}px, ${miniOffsetY}px) scale(${minimapScale})`, transformOrigin: '0 0' }} className="absolute inset-0 w-[12000px] h-[5000px]">
-              <svg className="absolute inset-0 w-full h-full">
-                {curriculum.map(node => {
-                  if (!node.prerequisite_topic_id) return null;
-                  const prereq = curriculum.find(n => n.id === node.prerequisite_topic_id);
-                  if (!prereq) return null;
-                  const isVisible = isNodeVisible(node);
-                  return <path key={`mini-line-${node.id}`} d={`M ${prereq.position.x} ${prereq.position.y} L ${node.position.x} ${node.position.y}`} stroke={node.status === 'mastered' ? '#078a52' : isVisible ? '#ffffff' : '#ffffff05'} strokeWidth="60" fill="none" />
-                })}
-              </svg>
-              {curriculum.map(node => {
-                const isVisible = isNodeVisible(node);
-                return <div key={`mini-node-${node.id}`} className={`absolute rounded-2xl border-[30px] transition-all ${node.status === 'mastered' ? 'bg-matcha-500 border-white' : isVisible ? 'bg-white border-white/50' : 'bg-white/5 border-white/5'}`} style={{ left: node.position.x, top: node.position.y, transform: 'translate(-50%, -50%)', width: 450, height: 450 }} />
-              })}
-            </div>
-            <motion.div className="absolute border-[3px] border-matcha-500 bg-matcha-500/10 pointer-events-none rounded-xl" style={{ left: (miniX * minimapScale) + miniOffsetX, top: (miniY * minimapScale) + miniOffsetY, width: miniViewportWidth, height: miniViewportHeight }} />
-          </div>
-        </div>
 
-        <div style={{ transform: `translate(${x}px, ${y}px) scale(${scale})`, transition: isDragging ? 'none' : 'transform 0.8s cubic-bezier(0.22, 1, 0.36, 1)' }} className="absolute origin-top-left">
+        <div style={{ transform: `translate(${x}px, ${y}px) scale(${scale})`, transition: (isDragging || isRecalibrating) ? 'none' : 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)' }} className="absolute origin-top-left">
           <div className="relative min-w-[12000px] min-h-[5000px]">
             <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 0 }}>
-              {curriculum.map(node => {
-                if (!node.prerequisite_topic_id) return null;
-                const prereq = curriculum.find(n => n.id === node.prerequisite_topic_id);
-                if (!prereq || !isNodeVisible(node)) return null;
-                const isMastered = node.status === 'mastered';
-                const angle = Math.atan2(node.position.y - prereq.position.y, node.position.x - prereq.position.x);
-                const offset = 220;
-                const endX = node.position.x - Math.cos(angle) * offset;
-                const endY = node.position.y - Math.sin(angle) * offset;
-                const startX = prereq.position.x + Math.cos(angle) * 220;
-                const startY = prereq.position.y + Math.sin(angle) * 220;
-                const d = `M ${startX} ${startY} C ${(startX + endX) / 2} ${startY}, ${(startX + endX) / 2} ${endY}, ${endX} ${endY}`;
-                return <path key={`line-${node.id}`} d={d} fill="none" stroke={isMastered ? '#078a52' : '#d6d3d1'} strokeWidth="8" strokeDasharray={isMastered ? "0" : "16,16"} className="transition-all duration-1000" />
-              })}
+              {curriculum
+                .map((node) => {
+                  if (!node.prerequisite_topic_id) return null;
+                  const prereq = curriculum.find(n => n.id === node.prerequisite_topic_id);
+                  if (!prereq || !isNodeVisible(node)) return null;
+                  const isMastered = node.status === 'mastered';
+                  const angle = Math.atan2(node.position.y - prereq.position.y, node.position.x - prereq.position.x);
+                  const offset = 220;
+                  const endX = node.position.x - Math.cos(angle) * offset;
+                  const endY = node.position.y - Math.sin(angle) * offset;
+                  const startX = prereq.position.x + Math.cos(angle) * 220;
+                  const startY = prereq.position.y + Math.sin(angle) * 220;
+                  const d = `M ${startX} ${startY} C ${(startX + endX) / 2} ${startY}, ${(startX + endX) / 2} ${endY}, ${endX} ${endY}`;
+                  return <path key={`line-${node.id}`} d={d} fill="none" stroke={isMastered ? '#5d4037' : '#d6d3d1'} strokeWidth="16" strokeDasharray={isMastered ? "0" : "20,20"} className="transition-all duration-1000" />
+                })}
             </svg>
             <AnimatePresence>
               {curriculum.map((node, i) => {
                 if (!isNodeVisible(node)) return null;
+
                 const isMastered = node.status === 'mastered';
                 const isSideQuest = node.track_type === 'side_quest';
-                const isLocked = isSideQuest && node.status === 'locked';
+                const isLocked = node.status === 'locked';
                 const canAfford = userStats.xp >= (node.xp_required || 0);
 
-                // ── Side Quest Card ──────────────────────────────────────────
-                if (isSideQuest) {
-                  const sqIcons = { 5: 'html', 6: 'brush', 7: 'storage' };
-                  const sqColors = {
-                    5: { border: 'border-orange-300', bg: 'bg-orange-400', glow: 'shadow-[16px_16px_0px_0px_rgba(251,146,60,0.5)]' },
-                    6: { border: 'border-blue-300', bg: 'bg-blue-500', glow: 'shadow-[16px_16px_0px_0px_rgba(59,130,246,0.5)]' },
-                    7: { border: 'border-purple-300', bg: 'bg-purple-500', glow: 'shadow-[16px_16px_0px_0px_rgba(168,85,247,0.5)]' },
-                  };
-                  const sqStyle = sqColors[node.id] || sqColors[5];
+                const subjectStyles = {
+                  'Python': { border: 'border-8 border-[#5d4037]', bg: 'bg-[#faf7f2]', iconBg: 'bg-[#5d4037]', glow: 'shadow-[24px_24px_0px_0px_rgba(93,64,55,0.25)]' },
+                  'Web': { border: 'border-8 border-[#5d4037]', bg: 'bg-[#faf7f2]', iconBg: 'bg-[#5d4037]', glow: 'shadow-[24px_24px_0px_0px_rgba(93,64,55,0.25)]' },
+                  'CSS': { border: 'border-8 border-[#5d4037]', bg: 'bg-[#faf7f2]', iconBg: 'bg-[#5d4037]', glow: 'shadow-[24px_24px_0px_0px_rgba(93,64,55,0.25)]' },
+                  'SQL': { border: 'border-8 border-[#5d4037]', bg: 'bg-[#faf7f2]', iconBg: 'bg-[#5d4037]', glow: 'shadow-[24px_24px_0px_0px_rgba(93,64,55,0.25)]' },
+                };
 
-                  return (
-                    <motion.div
-                      key={node.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className={`absolute w-[420px] bg-white rounded-[48px] border-2 ${sqStyle.border} p-10 z-10 overflow-hidden transition-all ${isLocked ? 'shadow-[16px_16px_0px_0px_rgba(0,0,0,0.15)]' : sqStyle.glow}`}
-                      style={{ left: node.position.x, top: node.position.y, transform: 'translate(-50%, -50%)' }}
-                    >
-                      {/* Side Quest badge */}
-                      <div className="absolute top-6 right-6 bg-amber-400 border-2 border-black rounded-xl px-3 py-1 text-[9px] font-black uppercase tracking-widest shadow-[2px_2px_0px_0px_black]">
-                        ⚡ Side Quest
-                      </div>
+                const currentStyle = (node.id === 6) ? subjectStyles['CSS'] : (subjectStyles[node.subject] || subjectStyles['Python']);
 
-                      <div className="flex flex-col gap-6">
-                        <div className="flex items-center gap-4">
-                          <div className={`w-16 h-16 rounded-[24px] ${sqStyle.bg} border-2 border-black/20 flex items-center justify-center shadow-lg`}>
-                            <span className="material-symbols-outlined text-white text-4xl font-black">{sqIcons[node.id] || 'code'}</span>
-                          </div>
-                          {isLocked && (
-                            <div className="w-12 h-12 bg-stone-100 border-2 border-stone-300 rounded-2xl flex items-center justify-center">
-                              <span className="material-symbols-outlined text-stone-400 text-2xl">lock</span>
-                            </div>
-                          )}
-                          {isMastered && (
-                            <div className="bg-matcha-600 w-12 h-12 rounded-full flex items-center justify-center shadow-xl border-4 border-white">
-                              <span className="material-symbols-outlined text-white text-2xl font-black">check</span>
-                            </div>
-                          )}
-                        </div>
 
-                        <div>
-                          <p className="text-[11px] font-black uppercase tracking-[0.5em] text-stone-400 mb-1">{node.chapter}</p>
-                          <h3 className="font-['Epilogue'] font-black text-2xl text-black leading-tight tracking-tight">{node.topic_name}</h3>
-                        </div>
+// ── Core Node Card (original) ───────────────────────────────
+const coreStyles = isLocked
+  ? { border: 'border-8 border-[#5d4037]', bg: 'bg-[#faf7f2]', icon: 'lock', opacity: 'opacity-100', glow: 'shadow-none' }
+  : { border: currentStyle.border, bg: currentStyle.bg, icon: 'code', opacity: 'opacity-100', glow: currentStyle.glow };
 
-                        {/* Module list — only if unlocked */}
-                        {!isLocked ? (
-                          <div className="space-y-3">
-                            {node.modules.map((mod, mi) => (
-                              <div
-                                key={mi}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleStartModule(node, mod);
-                                }}
-                                className={`flex items-center gap-4 p-3 rounded-2xl border cursor-pointer transition-all group/mod ${completedSubtopics.has(`${node.id}:${mod.title}`)
-                                  ? 'bg-green-50 border-green-200'
-                                  : 'bg-stone-50 border-stone-100 hover:border-black'
-                                  }`}
-                              >
-                                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${completedSubtopics.has(`${node.id}:${mod.title}`)
-                                  ? 'bg-green-500 text-white'
-                                  : 'bg-white border border-stone-200 text-stone-300 group-hover/mod:bg-black group-hover/mod:text-white transition-all'
-                                  }`}>
-                                  {completedSubtopics.has(`${node.id}:${mod.title}`)
-                                    ? <span className="material-symbols-outlined text-sm">check</span>
-                                    : mi + 1
-                                  }
-                                </span>
-                                <span className={`text-sm font-bold truncate ${completedSubtopics.has(`${node.id}:${mod.title}`)
-                                  ? 'text-green-700 line-through opacity-60'
-                                  : 'text-stone-600 group-hover/mod:text-black'
-                                  }`}>{mod.title.split(' ').slice(1).join(' ')}</span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          /* Locked overlay */
-                          <div className="bg-stone-50 border-2 border-dashed border-stone-200 rounded-3xl p-6 text-center">
-                            <p className="text-stone-400 text-xs font-bold mb-1">{node.modules.length} modules inside</p>
-                            <p className="text-stone-300 text-[10px] uppercase tracking-widest">Earn {node.xp_required} XP to access</p>
-                          </div>
-                        )}
-
-                        {/* Bottom bar */}
-                        <div className="flex items-center justify-between pt-2 border-t border-stone-100">
-                          <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-amber-500 text-xl">stars</span>
-                            <div>
-                              <p className="text-[9px] font-black text-stone-400 uppercase">Unlock Cost</p>
-                              <p className="text-base font-black text-amber-600">{node.xp_required} XP</p>
-                            </div>
-                          </div>
-                          {isLocked ? (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleUnlockSideQuest(node.id); }}
-                              disabled={!canAfford}
-                              className={`px-6 py-3 rounded-2xl border-2 border-black font-black text-[10px] uppercase tracking-widest transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none ${canAfford
-                                ? 'bg-amber-400 hover:bg-amber-300 text-black'
-                                : 'bg-stone-100 text-stone-400 cursor-not-allowed opacity-60'
-                                }`}
-                            >
-                              {canAfford ? '🔓 Unlock' : `Need ${node.xp_required - userStats.xp} more XP`}
-                            </button>
-                          ) : (
-                            <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest bg-stone-50 px-4 py-2 rounded-full">{node.difficulty_level}</span>
-                          )}
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                }
-
-                // ── Core Node Card (existing) ────────────────────────────────
-                const styles = { border: 'border-black', bg: 'bg-white', icon: 'code' };
-                return (
-                  <motion.div key={node.id} onClick={() => setSelectedNode(node)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={`absolute w-[450px] bg-white rounded-[48px] border-2 ${styles.border} p-12 z-10 cursor-pointer overflow-hidden shadow-[16px_16px_0px_0px_rgba(0,0,0,1)] hover:shadow-2xl transition-all`} style={{ left: node.position.x, top: node.position.y, transform: 'translate(-50%, -50%)' }}>
-                    <div className="flex flex-col gap-8">
-                      <div className="flex items-center justify-between"><div className={`w-16 h-16 rounded-[24px] ${styles.bg} border-2 border-black/10 flex items-center justify-center shadow-lg`}><span className="material-symbols-outlined text-white text-4xl font-black">{styles.icon}</span></div>{isMastered && <div className="bg-matcha-600 w-12 h-12 rounded-full flex items-center justify-center shadow-2xl border-4 border-white"><span className="material-symbols-outlined text-white text-2xl font-black">check</span></div>}</div>
-                      <div><p className="text-[11px] font-black uppercase tracking-[0.5em] text-stone-400 mb-2">{node.chapter}</p><h3 className="font-['Epilogue'] font-black text-3xl text-black leading-tight tracking-tight">{node.topic_name}</h3></div>
-                      <div className="space-y-4">
-                        {node.modules.map((mod, mi) => (
-                          <div
-                            key={mi}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveLesson({
-                                topic: mod.title,
-                                difficulty: node.difficulty_level,
-                                nodeId: node.id,
-                                xpReward: node.xp_reward,
-                                preWrittenTheory: mod.theory,
-                                preWrittenQuestions: mod.questions
-                              });
-                            }}
-                            className={`flex items-center gap-4 p-4 rounded-[20px] border cursor-pointer transition-all group/mod ${completedSubtopics.has(`${node.id}:${mod.title}`)
-                              ? 'bg-green-50 border-green-200'
-                              : 'bg-stone-50 border-stone-100 hover:border-black'
-                              }`}
-                          >
-                            <span className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${completedSubtopics.has(`${node.id}:${mod.title}`)
-                              ? 'bg-green-500 text-white'
-                              : 'bg-white border border-stone-100 text-stone-300 group-hover/mod:bg-black group-hover/mod:text-white transition-all'
-                              }`}>
-                              {completedSubtopics.has(`${node.id}:${mod.title}`)
-                                ? <span className="material-symbols-outlined text-sm">check</span>
-                                : mod.title.split(' ')[0]
-                              }
-                            </span>
-                            <span className={`text-sm font-bold truncate ${completedSubtopics.has(`${node.id}:${mod.title}`)
-                              ? 'text-green-700 line-through opacity-60'
-                              : 'text-stone-600 group-hover/mod:text-black transition-colors'
-                              }`}>
-                              {mod.title.split(' ').slice(1).join(' ')}
-                            </span>
-                            {completedSubtopics.has(`${node.id}:${mod.title}`) && (
-                              <span className="ml-auto text-[9px] font-black text-green-600 uppercase tracking-widest shrink-0">✓</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                      <div className="mt-6 pt-8 border-t border-stone-100 flex justify-between items-center">
-                        <div className="flex items-center gap-3">
-                          <span className="material-symbols-outlined text-matcha-600 text-2xl font-black">stars</span>
-                          <div>
-                            <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest">XP Potential</p>
-                            <span className="text-lg font-black text-matcha-600">{node.modules.reduce((s, m) => s + calcModuleXP(m), 0)} XP</span>
-                          </div>
-                        </div>
-                        <span className="text-[11px] font-black text-stone-400 uppercase tracking-widest bg-stone-50 px-6 py-3 rounded-full">{node.difficulty_level}</span>
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-          </div>
+return (
+  <motion.div
+    key={node.id}
+    onClick={() => {
+      if (isLocked) {
+        setAlert("DEFEAT PREVIOUS MISSIONS TO UNLOCK THIS SECTOR");
+        setTimeout(() => setAlert(null), 2000);
+        return;
+      }
+      setSelectedNode(node);
+    }}
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    className={`absolute w-[450px] ${coreStyles.bg} rounded-[48px] ${coreStyles.border} p-12 z-20 ${isLocked ? 'cursor-not-allowed' : 'cursor-pointer ' + (coreStyles.glow || 'shadow-[24px_24px_0px_0px_rgba(0,0,0,1)]') + ' hover:shadow-2xl hover:z-30'} ${coreStyles.opacity} transition-all`}
+    style={{ left: node.position.x, top: node.position.y, transform: 'translate(-50%, -50%)' }}
+  >
+    <div className="flex flex-col gap-8">
+      <div className="flex items-center justify-between">
+        <div className={`w-16 h-16 rounded-[24px] ${coreStyles.bg} border-2 border-black/10 flex items-center justify-center shadow-lg`}>
+          <span className="material-symbols-outlined text-black/40 text-4xl font-black">{coreStyles.icon}</span>
         </div>
-      </main>
-
-      {/* Lesson Overlay — mounts when a module is clicked */}
-      {activeLesson && (
-        <LessonOverlay
-          key={activeLesson.topic}
-          topic={activeLesson.topic}
-          difficulty={activeLesson.difficulty}
-          preWrittenTheory={activeLesson.preWrittenTheory}
-          preWrittenQuestions={activeLesson.preWrittenQuestions}
-          xpReward={activeLesson.xpReward}
-          onClose={() => setActiveLesson(null)}
-          onFinish={(earnedXP) => {
-            handleSubtopicComplete(activeLesson.nodeId, activeLesson.topic, earnedXP);
-          }}
-        />
-      )}
-
-      {/* Floating Chatbot Button */}
-      <div className="fixed bottom-10 right-10 flex gap-4 z-50">
-        <button
-          className="w-16 h-16 bg-blue-600 rounded-[20px] shadow-[6px_6px_0px_0px_rgba(37,99,235,0.4)] flex items-center justify-center hover:-translate-y-2 hover:shadow-[8px_8px_0px_0px_rgba(37,99,235,0.4)] transition-all group border-2 border-transparent hover:border-blue-400"
-          onClick={() => setIsSurvivalModeOpen(true)}
-          title="Adaptive Survival Mode"
-        >
-          <span className="text-3xl group-hover:animate-pulse">🏹</span>
-        </button>
-
-        <button
-          className="w-16 h-16 bg-black rounded-[20px] shadow-[6px_6px_0px_0px_rgba(7,138,82,1)] flex items-center justify-center hover:-translate-y-2 hover:shadow-[8px_8px_0px_0px_rgba(7,138,82,1)] transition-all group border-2 border-transparent hover:border-matcha-500"
-          onClick={() => setIsChatOpen(true)}
-        >
-          <span className="material-symbols-outlined text-white text-3xl font-black group-hover:animate-bounce">smart_toy</span>
-        </button>
+        {isMastered && <div className="bg-[#5d4037] w-12 h-12 rounded-full flex items-center justify-center shadow-2xl border-4 border-white"><span className="material-symbols-outlined text-white text-2xl font-black">check</span></div>}
       </div>
+      <div>
+        <p className="text-[11px] font-black uppercase tracking-[0.5em] text-orange-400/70 mb-2">{node.chapter}</p>
+        <h3 className="font-['Epilogue'] font-black text-3xl text-orange-600 leading-tight tracking-tight mb-4">{node.topic_name}</h3>
 
-      {/* Chatbot Panel */}
-      <ChatbotPanel
-        isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
-        userContext={{
-          xp: userStats.xp,
-          level: userStats.level,
-          rank: rlStats.rank,
-          modulesCompleted: completedSubtopics.size
-        }}
-      />
+        {/* Progress HUD */}
+        <div className="flex items-center gap-4 bg-black/5 p-3 rounded-2xl border border-black/5">
+          <div className="flex-1 h-2 bg-stone-100 rounded-full overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${node.progress}%` }}
+              className={`h-full ${isMastered ? 'bg-green-500' : 'bg-orange-500'}`}
+            />
+          </div>
+          <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest">
+            {node.progress}%
+          </span>
+        </div>
+      </div>
+      <div className="space-y-4">
+        {node.modules.map((mod, mi) => (
+          <div
+            key={mi}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isLocked) return;
+              setActiveLesson({
+                topic: mod.title,
+                difficulty: node.difficulty_level,
+                nodeId: node.id,
+                xpReward: node.xp_reward,
+                preWrittenTheory: mod.theory,
+                preWrittenQuestions: mod.questions
+              });
+            }}
+            className={`flex flex-col gap-2 p-4 rounded-[20px] border transition-all group/mod ${isLocked ? 'cursor-not-allowed' : 'cursor-pointer'} ${completedSubtopics.has(`${node.id}:${mod.title}`)
+              ? 'bg-green-50 border-green-200'
+              : 'bg-stone-50 border-stone-100 hover:border-[#5d4037]'
+              }`}
+          >
+            <div className="flex items-center gap-4">
+              <span className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${completedSubtopics.has(`${node.id}:${mod.title}`)
+                ? 'bg-green-500 text-white'
+                : 'bg-white border border-stone-100 text-stone-300 group-hover/mod:bg-black group-hover/mod:text-white transition-all'
+                }`}>
+                {completedSubtopics.has(`${node.id}:${mod.title}`)
+                  ? <span className="material-symbols-outlined text-sm">check</span>
+                  : mod.title.split(' ')[0]
+                }
+              </span>
+              <span className={`text-sm font-bold truncate ${completedSubtopics.has(`${node.id}:${mod.title}`)
+                ? 'text-green-700 line-through opacity-60'
+                : 'text-orange-500 group-hover/mod:text-orange-600 transition-colors'
+                }`}>
+                {mod.title.split(' ').slice(1).join(' ')}
+              </span>
+              {completedSubtopics.has(`${node.id}:${mod.title}`) && (
+                <span className="ml-auto text-[9px] font-black text-green-600 uppercase tracking-widest shrink-0">✓</span>
+              )}
+            </div>
+
+            {/* Revision Trigger */}
+            {failedQuestions[node.id]?.includes(mi) && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveLesson({
+                    topic: mod.title,
+                    difficulty: node.difficulty_level,
+                    nodeId: node.id,
+                    xpReward: Math.round(node.xp_reward / 2),
+                    preWrittenTheory: `### REVISION MODE\nThis mission focuses exclusively on the logic you missed earlier. Let's recalibrate your understanding of **${mod.title}**.`,
+                    preWrittenQuestions: mod.questions,
+                    isRevision: true
+                  });
+                }}
+                className="ml-12 px-3 py-1 bg-red-50 text-red-600 border border-red-100 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all w-fit flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined text-[12px]">refresh</span>
+                Start Revision Quest
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      {/* Core Node Navigation Footer */}
+      <div className="flex items-center justify-between pt-6 border-t border-stone-100/10 mt-2">
+        <button
+          onClick={(e) => { e.stopPropagation(); jumpToNode(node.prerequisite_topic_id); }}
+          disabled={!node.prerequisite_topic_id}
+          className={`w-12 h-12 rounded-full border-2 border-[#5d4037] flex items-center justify-center transition-all ${node.prerequisite_topic_id ? 'bg-orange-500 text-white shadow-[4px_4px_0px_0px_#5d4037] hover:bg-orange-600 active:shadow-none' : 'bg-stone-50 text-stone-200 border-stone-100 cursor-not-allowed'}`}
+          title="Previous Mission"
+        >
+          <span className="material-symbols-outlined">arrow_back</span>
+        </button>
+
+        <div className="flex flex-col items-center gap-1">
+          {node.id === 1 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); jumpToNode(5); }}
+              className="w-12 h-12 rounded-full border-2 border-[#5d4037] bg-orange-500 text-white flex items-center justify-center hover:bg-orange-600 transition-all shadow-[4px_4px_0px_0px_#5d4037] active:shadow-none mb-1"
+              title="Jump to Web Sector"
+            >
+              <span className="material-symbols-outlined text-lg">arrow_upward</span>
+            </button>
+          )}
+          <p className="text-[9px] font-black text-orange-400 uppercase tracking-widest">Potential</p>
+          <p className="text-xl font-black text-orange-600">{node.xp_reward} XP</p>
+        </div>
+
+        {(() => {
+          const nextNode = curriculum.find(n => n.prerequisite_topic_id === node.id);
+          return (
+            <button
+              onClick={(e) => { e.stopPropagation(); if (nextNode) jumpToNode(nextNode.id); }}
+              disabled={!nextNode}
+              className={`w-12 h-12 rounded-full border-2 border-[#5d4037] flex items-center justify-center transition-all ${nextNode ? 'bg-orange-500 text-white shadow-[4px_4px_0px_0px_#5d4037] hover:bg-orange-600 active:shadow-none' : 'bg-stone-50 text-stone-200 border-stone-100 cursor-not-allowed'}`}
+              title="Next Mission"
+            >
+              <span className="material-symbols-outlined">arrow_forward</span>
+            </button>
+          );
+        })()}
+      </div>
+    </div>
+  </motion.div>
+);
+
+              })}
+            </AnimatePresence >
+          </div >
+        </div >
+      </main >
+
+  {/* Lesson Overlay — mounts when a module is clicked */ }
+{
+  activeLesson && (
+    <LessonOverlay
+      key={activeLesson.topic}
+      topic={activeLesson.topic}
+      difficulty={activeLesson.difficulty}
+      preWrittenTheory={activeLesson.preWrittenTheory}
+      preWrittenQuestions={activeLesson.preWrittenQuestions}
+      xpReward={activeLesson.xpReward}
+      onClose={() => setActiveLesson(null)}
+      onFinish={(earnedXP, results) => {
+        handleSubtopicComplete(activeLesson.nodeId, activeLesson.topic, earnedXP, results);
+      }}
+    />
+  )
+}
+
+{/* Floating Chatbot Button */ }
+<div className="fixed bottom-10 right-10 flex gap-4 z-50">
+  <button
+    className="w-16 h-16 bg-white border-2 border-black rounded-[20px] shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center hover:-translate-y-2 hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all group active:translate-y-0 active:shadow-none"
+    onClick={handleRecenter}
+    title="Recenter Map"
+  >
+    <span className="material-symbols-outlined text-black text-3xl font-black group-hover:rotate-180 transition-transform duration-500">my_location</span>
+  </button>
+
+  <button
+    className="w-16 h-16 bg-blue-600 rounded-[20px] shadow-[6px_6px_0px_0px_rgba(37,99,235,0.4)] flex items-center justify-center hover:-translate-y-2 hover:shadow-[8px_8px_0px_0px_rgba(37,99,235,0.4)] transition-all group border-2 border-transparent hover:border-blue-400"
+    onClick={() => setIsSurvivalModeOpen(true)}
+    title="Adaptive Survival Mode"
+  >
+    <span className="text-3xl group-hover:animate-pulse">🏹</span>
+  </button>
+
+  <button
+    className="w-16 h-16 bg-black rounded-[20px] shadow-[6px_6px_0px_0px_rgba(7,138,82,1)] flex items-center justify-center hover:-translate-y-2 hover:shadow-[8px_8px_0px_0px_rgba(7,138,82,1)] transition-all group border-2 border-transparent hover:border-matcha-500"
+    onClick={() => setIsChatOpen(true)}
+  >
+    <span className="material-symbols-outlined text-white text-3xl font-black group-hover:animate-bounce">smart_toy</span>
+  </button>
+</div>
+
+{/* Chatbot Panel */ }
+  <ChatbotPanel
+    isOpen={isChatOpen}
+    onClose={() => setIsChatOpen(false)}
+    userContext={{
+      xp: userStats.xp,
+      level: userStats.level,
+      rank: rlStats.rank,
+      modulesCompleted: completedSubtopics.size,
+      completedModulesList: Array.from(completedSubtopics),
+      struggleAreas: Object.keys(failedQuestions),
+      currentTopic: selectedNode ? selectedNode.topic_name : 'Exploring Map'
+    }}
+  />
+
 
       <AnimatePresence>
         {isSurvivalModeOpen && (
@@ -1011,8 +1159,30 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
             }}
           />
         )}
+
+
+        {isRecalibrating && (
+          <motion.div
+
+          key="recalibrator"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-md flex flex-col items-center justify-center gap-6"
+          >
+            <motion.div 
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+              className="w-12 h-12 border-4 border-matcha-500 border-t-transparent rounded-full shadow-[0_0_20px_#84e7a5]"
+            />
+            <div className="text-center">
+              <p className="text-white font-black text-xs uppercase tracking-[0.4em] animate-pulse">Syncing User Identity</p>
+              <p className="text-white/40 text-[10px] uppercase tracking-widest mt-2">Reconfiguring Neural Map Assets...</p>
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
-    </div>
+    </div >
   );
 };
 

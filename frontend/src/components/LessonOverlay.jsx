@@ -20,6 +20,7 @@ const LessonOverlay = ({ topic, difficulty, onClose, onFinish, preWrittenTheory,
   const [earnedXP, setEarnedXP] = useState(0);
   const [xpBreakdown, setXpBreakdown] = useState([]);
   const [passed, setPassed] = useState(false);
+  const [aiTip, setAiTip] = useState(null);
   const fillInputRef = useRef(null);
 
   // Max possible XP for this lesson
@@ -39,6 +40,7 @@ const LessonOverlay = ({ topic, difficulty, onClose, onFinish, preWrittenTheory,
       setCurrentQuestionIndex(0);
       setUserAnswers({});
       setFeedback(null);
+      setAiTip(null);
       setPassed(false);
     } else {
       setErrorMessage("This mission's intelligence files are still being decrypted. Check back soon!");
@@ -60,6 +62,7 @@ const LessonOverlay = ({ topic, difficulty, onClose, onFinish, preWrittenTheory,
       if (currentQuestionIndex < (lessonData?.questions?.length || 0) - 1) {
         setCurrentQuestionIndex(prev => prev + 1);
         setFeedback(null);
+        setAiTip(null);
       } else {
         // Quiz done — check pass threshold
         // earnedXP state updates asynchronously, so compute from breakdown
@@ -79,8 +82,12 @@ const LessonOverlay = ({ topic, difficulty, onClose, onFinish, preWrittenTheory,
 
     const currentQuestion = lessonData.questions[currentQuestionIndex];
     const qType = currentQuestion.type || currentQuestion.question_type;
-    // Case-insensitive, trimmed comparison for fill-in-blank
-    const isCorrect = answer.trim().toLowerCase() === currentQuestion.correct_answer.trim().toLowerCase();
+    
+    // For coding questions, if they click "Mark as Complete", it's always correct
+    const isCorrect = qType === 'coding' 
+      ? true 
+      : answer.trim().toLowerCase() === currentQuestion.correct_answer.trim().toLowerCase();
+    
     const xpGained = isCorrect ? (XP_RULES[qType] || 20) : 0;
 
     const newTotal = earnedXP + xpGained;
@@ -95,6 +102,28 @@ const LessonOverlay = ({ topic, difficulty, onClose, onFinish, preWrittenTheory,
         ? `🎯 Correct! +${xpGained} XP`
         : `❌ Not quite. The correct answer was: "${currentQuestion.correct_answer}"`
     });
+
+    if (!isCorrect) {
+      // If it's an MCQ, try to get the text of the correct answer for a better hint
+      let targetConcept = currentQuestion.correct_answer;
+      if (qType === 'mcq' && currentQuestion.options) {
+        if (targetConcept.length === 1 && currentQuestion.options.length >= (targetConcept.charCodeAt(0) - 65)) {
+          const optIdx = targetConcept.charCodeAt(0) - 65;
+          const optText = currentQuestion.options[optIdx] || "";
+          // Extract the most "meaningful" word (longest word that isn't just a preposition)
+          const words = optText.split(' ').filter(w => w.length > 2);
+          targetConcept = words.length > 0 ? words.sort((a,b) => b.length - a.length)[0] : optText;
+        }
+      }
+
+      const tips = [
+        `HINT: The concept of ${topic} focuses on precision. Re-read the first paragraph!`,
+        `AI OBSERVATION: You're close, but check the ${targetConcept.toLowerCase()} logic specifically.`,
+        `TACTICAL TIP: Focus on "${targetConcept}". It's the mission-critical component here!`,
+        `RECALIBRATING: Re-examine your understanding of ${topic.toLowerCase()}.`
+      ];
+      setAiTip(tips[Math.floor(Math.random() * tips.length)]);
+    }
 
     setUserAnswers(prev => ({ ...prev, [currentQuestionIndex]: answer }));
   };
@@ -146,24 +175,27 @@ const LessonOverlay = ({ topic, difficulty, onClose, onFinish, preWrittenTheory,
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="fixed inset-0 z-[100] bg-warm-cream flex flex-col"
+      className="fixed inset-0 z-[100] bg-warm-cream overflow-y-auto scroll-smooth"
     >
       {/* ── Header ─────────────────────────────────────────────────── */}
-      <header className="shrink-0 z-10 bg-white/80 backdrop-blur-md border-b-2 border-stone-100 px-10 py-5 flex justify-between items-center">
+      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b-2 border-stone-100 px-10 py-5 flex justify-between items-center">
         <div className="flex items-center gap-4">
           <span className="text-[10px] font-black uppercase tracking-[0.4em] text-stone-400">Mission</span>
           <h2 className="font-display-secondary font-black text-xl">{topic}</h2>
         </div>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-10">
           {stage === 'quiz' && lessonData?.questions && (
-            <div className="flex items-center gap-2">
-              {lessonData.questions.map((_, i) => (
-                <div key={i} className={`w-3 h-3 rounded-full border-2 border-black transition-all ${
-                  xpBreakdown[i]
-                    ? (xpBreakdown[i].isCorrect ? 'bg-green-500 border-green-600' : 'bg-red-400 border-red-500')
-                    : i === currentQuestionIndex ? 'bg-black' : 'bg-transparent'
-                }`} />
-              ))}
+            <div className="flex items-center gap-4 min-w-[200px]">
+              <div className="flex-1 h-3 bg-stone-100 rounded-full overflow-hidden border border-stone-200">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${((currentQuestionIndex) / lessonData.questions.length) * 100}%` }}
+                  className="h-full bg-black transition-all"
+                />
+              </div>
+              <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest shrink-0">
+                {currentQuestionIndex + 1} / {lessonData.questions.length}
+              </span>
             </div>
           )}
           {/* Live XP counter */}
@@ -179,8 +211,7 @@ const LessonOverlay = ({ topic, difficulty, onClose, onFinish, preWrittenTheory,
       </header>
 
       {/* ── Scrollable body ─────────────────────────────────────────── */}
-      <div style={{ height: 'calc(100vh - 73px)', overflowY: 'auto' }}>
-        <main className="max-w-3xl mx-auto px-8 py-12">
+      <main className="max-w-3xl mx-auto px-8 pt-12 pb-40 min-h-screen">
           <AnimatePresence mode="wait">
 
             {/* ── Theory ─────────────────────────────────────────────── */}
@@ -285,6 +316,12 @@ const LessonOverlay = ({ topic, difficulty, onClose, onFinish, preWrittenTheory,
                       <p className={`font-black text-base ${feedback.correct ? 'text-green-700' : 'text-red-700'}`}>
                         {feedback.message}
                       </p>
+                      {aiTip && !feedback.correct && (
+                        <div className="mt-2 flex items-start gap-2 bg-white/50 p-3 rounded-xl border border-red-200">
+                          <span className="material-symbols-outlined text-red-500 text-sm">psychology</span>
+                          <p className="text-[11px] font-bold text-red-600 leading-tight">AI RECOVERY TIP: {aiTip}</p>
+                        </div>
+                      )}
                       <p className="text-xs text-stone-400 font-bold mt-1">
                         Running total: <span className="text-matcha-600 font-black">{earnedXP} / {maxPossibleXP} XP</span>
                       </p>
@@ -358,7 +395,7 @@ const LessonOverlay = ({ topic, difficulty, onClose, onFinish, preWrittenTheory,
                 {/* Action buttons */}
                 {passed ? (
                   <button
-                    onClick={() => onFinish(earnedXP)}
+                    onClick={() => onFinish(earnedXP, xpBreakdown)}
                     className="w-full py-5 bg-black text-white rounded-[28px] font-black text-xs uppercase tracking-[0.4em] shadow-[8px_8px_0px_0px_rgba(132,231,165,1)] transition-all hover:translate-y-[-2px]"
                   >
                     Continue to Next Mission →
@@ -392,7 +429,6 @@ const LessonOverlay = ({ topic, difficulty, onClose, onFinish, preWrittenTheory,
 
           </AnimatePresence>
         </main>
-      </div>
     </motion.div>
   );
 };

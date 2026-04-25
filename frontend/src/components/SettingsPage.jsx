@@ -344,7 +344,23 @@ const SettingsPage = ({ onBack, userStats }) => {
                 <p className="text-stone-500 font-bold mb-10">This action will permanently purge all XP, streaks, and curriculum mastery. This cannot be undone.</p>
                 <div className="flex gap-4">
                    <button onClick={() => setShowResetModal(false)} className="flex-1 py-5 bg-stone-100 rounded-2xl border-2 border-black font-black uppercase text-[10px] tracking-widest hover:bg-stone-200 transition-all">Abort Action</button>
-                   <button onClick={() => setShowResetModal(false)} className="flex-1 py-5 bg-red-600 text-white rounded-2xl border-2 border-black font-black uppercase text-[10px] tracking-widest shadow-[6px_6px_0px_0px_#000] active:shadow-none transition-all">Confirm Purge</button>
+                   <button 
+                      onClick={async () => {
+                        try {
+                          await fetch('http://localhost:8000/api/rl/purge-progress/1', { method: 'POST' });
+                        } catch (err) {
+                          console.warn("Backend purge failed, clearing local data only.");
+                        }
+                        Object.keys(localStorage).forEach(key => {
+                          if (key.includes('cortexai')) localStorage.removeItem(key);
+                        });
+                        alert("SYSTEM PURGE SUCCESSFUL. REBOOTING...");
+                        window.location.reload();
+                      }} 
+                      className="flex-1 py-5 bg-red-600 text-white rounded-2xl border-2 border-black font-black uppercase text-[10px] tracking-widest shadow-[6px_6px_0px_0px_#000] active:shadow-none transition-all"
+                    >
+                      Confirm Purge
+                    </button>
                 </div>
              </motion.div>
           </div>

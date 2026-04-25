@@ -46,17 +46,26 @@ def chat_with_agent(messages, user_context=None):
     `messages` is a list of dicts: [{'role': 'user', 'content': '...'}]
     `user_context` contains stats like XP, streaks, etc.
     """
-    base_prompt = "You are Krith, an elite AI companion and learning assistant on the CortexAI gamified learning platform. Your tone is supportive, energetic, concise, and slightly futuristic/tactical. Help the user learn Python, answer their coding questions, and encourage them to complete their quests on the map. Keep responses very concise and format code snippets neatly."
+    base_prompt = """You are Krith, an elite AI learning assistant on the CortexAI gamified platform. Your tone is supportive, energetic, concise, and futuristic. 
+    CRITICAL RESTRICTIONS:
+    1. STRICTLY limit your scope to educational topics (Python, Web Dev, SQL), coding concepts, and the CortexAI curriculum.
+    2. If the user asks about off-topic subjects (e.g., politics, movies, general trivia), politely but firmly refuse to answer and redirect them back to their coding quests.
+    3. DO NOT write full code solutions for the user. Instead, provide hints, pseudo-code, and explanations to guide them to the answer.
+    4. Keep all responses very concise (under 4 sentences if possible) and format code snippets neatly.
+    """
     
     if user_context:
         context_str = f"""
-        [USER PERFORMANCE DATA]
-        Total XP: {user_context.get('totalXP', 0)}
-        Current Streak: {user_context.get('streak', 0)} days
-        Questions Answered: {user_context.get('questionsAnswered', 0)}
-        Modules Completed: {user_context.get('completedModules', 0)}
+        [USER PERFORMANCE DATABASE]
+        Total XP: {user_context.get('xp', 0)}
+        Current Level: {user_context.get('level', 1)}
+        Current Rank: {user_context.get('rank', 'Novice')}
+        Total Modules Mastered: {user_context.get('modulesCompleted', 0)}
+        Currently Focused Topic: {user_context.get('currentTopic', 'Exploring Map')}
+        Exact Completed Subtopics: {', '.join(user_context.get('completedModulesList', [])) or 'None yet'}
+        Current Struggle Areas (Failed Quizzes): {', '.join(user_context.get('struggleAreas', [])) or 'None. Performing flawlessly.'}
         
-        Use this data to personalize your responses. If they have a high streak or XP, praise them. If they ask about their progress, reference these exact numbers.
+        Use this complete database context to deeply personalize your responses. If they ask about their points or progress, cite these exact numbers. If they are struggling with a topic listed above, offer targeted encouragement.
         """
         base_prompt += "\n" + context_str
 
@@ -88,9 +97,11 @@ def generate_survival_mission(topic: str, action: str, question_text: str):
     The difficulty action selected is: {action}
     The core question to ask is: "{question_text}"
 
-    Generate a short 1-2 sentence narrative context setting up a hacking or futuristic mission scenario. 
-    Make it feel engaging and tactical.
-    Also generate a creative reward for solving it (e.g., '+50 XP', 'Data Key unlocked').
+    Generate a short 1-2 sentence narrative context in English that is 'Professional but Entertaining.' 
+    Use a high-octane 'Mass' TFI (Telugu Film Industry) cinematic style, but keep the language polished and technical.
+    The narrative should frame the student as a 'Professional Hero' taking down a sophisticated digital empire. 
+    Use cinematic metaphors like 'High-Stakes Elevation' or 'Strategic Takedown' to build excitement while staying focused on the {topic} learning objective.
+    Generate a creative reward (e.g., 'Heroic Elevation +50 XP', 'Strategic Logic Core', 'Mastery Credential').
 
     Return ONLY a raw JSON object:
     {{

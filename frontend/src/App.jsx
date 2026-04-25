@@ -8,6 +8,7 @@ import DuolingoDashboard from './components/DuolingoDashboard';
 import SettingsPage from './components/SettingsPage';
 import AchievementsPage from './components/AchievementsPage';
 import ParentDashboard from './components/ParentDashboard';
+import Home from './components/Home';
 import { supabase } from './supabaseClient';
 
 const CustomCursor = () => {
@@ -110,7 +111,6 @@ const App = () => {
       }
     });
 
-    // Listen for auth changes — only redirect on real sign-in, not on silent token refresh
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
@@ -140,9 +140,10 @@ const App = () => {
   };
 
   return (
-    <div className="relative overflow-x-hidden bg-warm-cream min-h-screen font-body-standard text-on-background selection:bg-lemon-400 selection:text-black">
+    <div className="relative overflow-x-hidden min-h-screen font-body-standard text-on-background selection:bg-lemon-400 selection:text-black">
       <CustomCursor />
       <AnimatePresence mode="wait">
+
         {view === 'home' && (
           <motion.div
             key="home"
@@ -152,7 +153,7 @@ const App = () => {
               animate: { opacity: 1, transition: { staggerChildren: 0.1 } },
               exit: { opacity: 0 }
             }}
-            className="flex flex-col"
+            className="flex flex-col bg-warm-cream min-h-screen"
           >
             <motion.nav 
               variants={{ initial: { y: -20, opacity: 0 }, animate: { y: 0, opacity: 1 } }}
@@ -225,8 +226,9 @@ const App = () => {
           </motion.div>
         )}
 
+
         {view === 'login' && (
-          <motion.div key="login" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+          <motion.div className="bg-warm-cream min-h-screen" key="login" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
             <Login 
               onLogin={() => setView('dashboard')} 
               onSignUp={() => setView('signup')} 
@@ -236,8 +238,8 @@ const App = () => {
         )}
 
         {view === 'signup' && (
-          <motion.div key="signup" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-            <SignUp onSignUp={() => setView('dashboard')} onGoToLogin={() => setView('login')} onBack={() => setView('home')} />
+          <motion.div className="bg-warm-cream min-h-screen" key="signup" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+            <SignUp onSignUp={() => setView('dashboard')} onLogin={() => setView('login')} onBack={() => setView('home')} />
           </motion.div>
         )}
 
@@ -265,25 +267,25 @@ const App = () => {
         )}
 
         {view === 'performance' && (
-          <motion.div key="performance" initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -50 }}>
+          <motion.div className="bg-warm-cream min-h-screen" key="performance" initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -50 }}>
             <PerformanceDashboard onBack={() => setView('dashboard')} />
           </motion.div>
         )}
 
         {view === 'settings' && (
-          <motion.div key="settings" initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -50 }}>
+          <motion.div className="bg-warm-cream min-h-screen" key="settings" initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -50 }}>
             <SettingsPage onBack={() => setView('dashboard')} userStats={JSON.parse(localStorage.getItem('cortexai_userstats_v2') || '{}')} />
           </motion.div>
         )}
 
         {view === 'achievements' && (
-          <motion.div key="achievements" initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -50 }}>
+          <motion.div className="bg-warm-cream min-h-screen" key="achievements" initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -50 }}>
             <AchievementsPage onBack={() => setView('dashboard')} />
           </motion.div>
         )}
 
         {view === 'parent_dashboard' && (
-          <motion.div key="parent_dashboard" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }}>
+          <motion.div className="bg-warm-cream min-h-screen" key="parent_dashboard" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }}>
             <ParentDashboard onBack={() => setView('login')} />
           </motion.div>
         )}

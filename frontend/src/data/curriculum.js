@@ -170,11 +170,12 @@ export const curriculumData = [
     subject: 'Web',
     chapter: 'Side Quest',
     topic_name: 'HTML Fundamentals',
+    prerequisite_topic_id: 1,
     difficulty_level: 'easy',
     xp_reward: 80,
     xp_required: 100,
     track_type: 'side_quest',
-    position: { x: 2500, y: 800 },
+    position: { x: 1750, y: 750 },
     status: 'locked',
     modules: [
       {
@@ -206,11 +207,12 @@ export const curriculumData = [
     subject: 'Web',
     chapter: 'Side Quest',
     topic_name: 'CSS Styling',
+    prerequisite_topic_id: 5,
     difficulty_level: 'medium',
     xp_reward: 150,
     xp_required: 200,
     track_type: 'side_quest',
-    position: { x: 3800, y: 800 },
+    position: { x: 3250, y: 750 },
     status: 'locked',
     modules: [
       {
@@ -242,11 +244,12 @@ export const curriculumData = [
     subject: 'SQL',
     chapter: 'Side Quest',
     topic_name: 'SQL Basics',
+    prerequisite_topic_id: 4,
     difficulty_level: 'hard',
     xp_reward: 200,
     xp_required: 300,
     track_type: 'side_quest',
-    position: { x: 5500, y: 800 },
+    position: { x: 4750, y: 750 },
     status: 'locked',
     modules: [
       {

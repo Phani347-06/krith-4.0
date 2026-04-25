@@ -1,6 +1,8 @@
 import json
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Path
 from pydantic import BaseModel
+from db import db as supabase
 from services.rl_engine import get_next_action, process_answer, get_student_progress
 from services.llm_service import generate_survival_mission
 
@@ -73,19 +75,18 @@ async def weekly_activity_endpoint(student_id: int = Path(...)):
     Returns XP earned per day for the last 7 days — used for the Guardian Portal engagement chart.
     """
     try:
-        from db import db as supabase
-        from datetime import datetime, timedelta, timezone
-
         today = datetime.now(timezone.utc).date()
         start_date = today - timedelta(days=6)
         
         base_xp = 100
         xp_by_date = {}
 
-        res = supabase.table("interaction_logs") \
-            .select("reward,created_at") \
-            .eq("student_id", student_id) \
+        res = (
+            supabase.table("interaction_logs")
+            .select("reward,created_at")
+            .eq("student_id", student_id)
             .execute()
+        )
 
         if res.data:
             for log in res.data:
@@ -128,8 +129,6 @@ async def log_xp_endpoint(request: XPLogRequest):
     Also updates mastery_score if provided.
     """
     try:
-        from db import db as supabase
-        
         if request.mastery_score is not None:
             supabase.table("student_mastery").upsert({
                 "student_id": request.student_id,
@@ -151,6 +150,23 @@ async def log_xp_endpoint(request: XPLogRequest):
         return {"status": "ok", "xp_logged": request.xp_earned}
     except Exception as e:
         print(f"XP Log Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/purge-progress/{student_id}")
+async def purge_progress_endpoint(student_id: int = Path(...)):
+    """
+    Physically wipes all progress data for a student from the database.
+    """
+    try:
+        # 1. Delete all interaction logs (XP/History)
+        supabase.table("interaction_logs").delete().eq("student_id", student_id).execute()
+        
+        # 2. Delete all mastery records
+        supabase.table("student_mastery").delete().eq("student_id", student_id).execute()
+        
+        return {"status": "success", "message": f"All progress data for student {student_id} has been purged."}
+    except Exception as e:
+        print(f"Purge Progress Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/student-progress/{student_id}")

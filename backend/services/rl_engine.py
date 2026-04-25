@@ -33,21 +33,29 @@ def get_next_action(student_id: int, last_question_id: int = None):
             if absences > 3:
                 attendance_issues = True
 
-        # Check for mastery-based progression
+        # Check for mastery-based progression - PRIORITIZE WEAKEST TOPICS
         mastery_levels = supabase.table("student_mastery").select("*").eq("student_id", student_id).execute()
         if mastery_levels.data:
-            # Find the highest topic ID that is mastered (> 0.6)
-            mastered_ids = [m["topic_id"] for m in mastery_levels.data if m.get("mastery_score", 0) >= 0.6]
-            if mastered_ids:
-                max_id = max(mastered_ids)
-                # If there's a next topic in our mapping, move to it
-                if (max_id + 1) in topic_mapping:
-                    target_topic = max_id + 1
-                    mastery_score = 0.3 # Start low for new topic
+            # First, check if there are any "Weak" topics (score < 0.4)
+            weak_topics = [m for m in mastery_levels.data if m.get("mastery_score", 0.5) < 0.4]
+            
+            if weak_topics:
+                # Target the absolute weakest topic
+                weakest = min(weak_topics, key=lambda x: x.get("mastery_score", 0.5))
+                target_topic = weakest["topic_id"]
+                mastery_score = weakest.get("mastery_score", 0.3)
             else:
-                # Find the lowest topic they have started
-                target_topic = min([m["topic_id"] for m in mastery_levels.data])
-                mastery_score = min([m.get("mastery_score", 0.5) for m in mastery_levels.data])
+                # If no weak topics, find the highest topic ID that is mastered (> 0.6)
+                mastered_ids = [m["topic_id"] for m in mastery_levels.data if m.get("mastery_score", 0) >= 0.6]
+                if mastered_ids:
+                    max_id = max(mastered_ids)
+                    if (max_id + 1) in topic_mapping:
+                        target_topic = max_id + 1
+                        mastery_score = 0.3
+                else:
+                    # Find the lowest topic they have started
+                    target_topic = min([m["topic_id"] for m in mastery_levels.data])
+                    mastery_score = min([m.get("mastery_score", 0.5) for m in mastery_levels.data])
 
         db_target_topic = topic_mapping.get(target_topic, "Variables")
 

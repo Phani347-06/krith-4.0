@@ -69,7 +69,7 @@ const SignUp = ({ onBack, onLogin }) => {
       }
       
       setLoading(false);
-      // App.jsx will automatically detect the new session and redirect to Dashboard
+      if (onSignUp) onSignUp();
     }
   };
 
@@ -203,11 +203,11 @@ const SignUp = ({ onBack, onLogin }) => {
                   <input 
                     className="w-full bg-pure-white border border-outline rounded px-4 py-4 text-center font-display-secondary text-2xl tracking-[0.3em] text-clay-black focus:border-focus-ring focus:ring-1 focus:ring-focus-ring transition-colors" 
                     id="otp" 
-                    placeholder="00000000" 
+                    placeholder="000000" 
                     type="text"
-                    maxLength="8"
+                    maxLength="6"
                     value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                     required
                   />
                 </div>
