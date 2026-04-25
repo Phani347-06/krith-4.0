@@ -380,13 +380,14 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
       return { ...prev, xp: newXP, level: Math.floor(newXP / 200) + 1, streak: newStreak };
     });
 
-    // Update curriculum for Revision Path (RL Logic)
+    // 3. Trigger/Update Remediation logic
     const hasFailures = results.some(r => !r.isCorrect);
-
+    
     setCurriculum(prev => {
       let nextCurriculum = [...prev];
 
-      if (hasFailures) {
+      // If they passed with mistakes, inject/update remediation (only for core nodes)
+      if (hasFailures && nodeId < 1000) {
         const revisionNodeId = 1000 + nodeId;
         const revisionNode = {
           id: revisionNodeId,
@@ -421,16 +422,56 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
         setTimeout(() => setAlert(null), 3000);
       } else {
         // Successful completion logic
-        nextCurriculum = nextCurriculum.map(n => {
-          if (n.id === nodeId) {
-            return { ...n, status: allDone ? 'mastered' : n.status, progress: progressPercent * 100 };
+        if (nodeId >= 1000) {
+          const originalNodeId = nodeId - 1000;
+          // 1. Remove the remediation quest from the map
+          nextCurriculum = nextCurriculum.filter(n => n.id !== nodeId);
+          // 2. Point all downstream nodes back to the original node and unlock them
+          nextCurriculum = nextCurriculum.map(n => {
+            if (n.prerequisite_topic_id === nodeId) {
+              return { ...n, prerequisite_topic_id: originalNodeId, status: 'in_progress' };
+            }
+            return n;
+          });
+          // 3. Mark the original node as mastered if all its modules are now clear
+          nextCurriculum = nextCurriculum.map(n => {
+            if (n.id === originalNodeId) {
+              const isMasteredNow = n.modules.every(m => newCompleted.has(`${originalNodeId}:${m.title}`));
+              const currentProgress = (n.modules.filter(m => newCompleted.has(`${originalNodeId}:${m.title}`)).length / n.modules.length) * 100;
+              return { ...n, status: isMasteredNow ? 'mastered' : 'in_progress', progress: currentProgress };
+            }
+            return n;
+          });
+        } else {
+          // Standard core node completion
+          nextCurriculum = nextCurriculum.map(n => {
+            if (n.id === nodeId) {
+              return { ...n, status: allDone ? 'mastered' : n.status, progress: progressPercent * 100 };
+            }
+            // If this was a prerequisite for something locked, unlock it
+            if (allDone && n.prerequisite_topic_id === nodeId && n.status === 'locked') {
+              return { ...n, status: 'in_progress' };
+            }
+            return n;
+          });
+
+          // NEW: If the student just perfected a module that previously had remediation,
+          // check if we can remove that remediation node now.
+          if (!hasFailures) {
+            const revisionNodeId = 1000 + nodeId;
+            const hasExistingRevision = nextCurriculum.some(n => n.id === revisionNodeId);
+            if (hasExistingRevision) {
+              // Remove the revision node and point downstream back to original
+              nextCurriculum = nextCurriculum.filter(n => n.id !== revisionNodeId);
+              nextCurriculum = nextCurriculum.map(n => {
+                if (n.prerequisite_topic_id === revisionNodeId) {
+                  return { ...n, prerequisite_topic_id: nodeId };
+                }
+                return n;
+              });
+            }
           }
-          // If this was a prerequisite for something locked, unlock it
-          if (allDone && n.prerequisite_topic_id === nodeId && n.status === 'locked') {
-            return { ...n, status: 'in_progress' };
-          }
-          return n;
-        });
+        }
 
         if (allDone) {
           setActiveLesson(null);
