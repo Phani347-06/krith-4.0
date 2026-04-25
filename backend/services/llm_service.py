@@ -60,7 +60,7 @@ def chat_with_agent(messages, user_context=None):
     {
         "reply": "Your conversational response to the user here.",
         "rl_insight": {
-            "detected_topic_id": 0, // Integer 1-9 (1:Variables, 2:Conditions, 3:Loops, 4:Functions, 5:Data Structures, 6:Recursion, 7:Frontend, 8:SQL, 9:AI/ML). Use 0 if the conversation is general and no specific topic is discussed.
+            "detected_topic_id": 0, // Integer 1-7. STRICTLY use these IDs: 1:Variables, 2:Loops, 3:Functions, 4:Recursion, 5:Frontend/Web, 6:SQL/Databases, 7:AI/ML. Use 0 if general.
             "sentiment": "neutral", // Can be "struggle", "strength", or "neutral" based on how well they understand the topic.
             "mastery_delta": 0.0 // A float value: use -0.05 for struggle, 0.05 for strength, and 0.0 for neutral.
         }
