@@ -121,6 +121,15 @@ const Login = ({ onBack, onSignUp }) => {
           <p className="text-center font-body-standard text-body-standard text-warm-charcoal mt-2">
             Don't have an account? <button onClick={onSignUp} className="text-primary hover:text-slushie-800 underline decoration-2 underline-offset-4 hover:rotate-[-2deg] inline-block transition-all duration-200">Sign up</button>
           </p>
+          <div className="pt-4 border-t border-slate-100">
+             <button 
+               onClick={() => onBack('parent_dashboard')} 
+               className="w-full py-3 bg-slate-50 text-slate-600 rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-slate-100 transition-all flex items-center justify-center gap-2"
+             >
+               <span className="material-symbols-outlined text-sm">family_restroom</span>
+               Enter Guardian Portal
+             </button>
+          </div>
         </div>
         {/* Decorative background elements */}
         <div className="absolute top-1/4 left-10 w-32 h-32 bg-lemon-400 rounded-full blur-3xl opacity-20 -z-10 pointer-events-none"></div>

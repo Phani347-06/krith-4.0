@@ -7,6 +7,7 @@ import PerformanceDashboard from './components/PerformanceDashboard';
 import DuolingoDashboard from './components/DuolingoDashboard';
 import SettingsPage from './components/SettingsPage';
 import AchievementsPage from './components/AchievementsPage';
+import ParentDashboard from './components/ParentDashboard';
 import { supabase } from './supabaseClient';
 
 const CustomCursor = () => {
@@ -96,24 +97,31 @@ const CustomCursor = () => {
 };
 
 const App = () => {
-  const [view, setView] = useState('home');
+  const [view, setView] = useState(() => localStorage.getItem('cortexai_current_view') || 'home');
   const [session, setSession] = useState(null);
 
   useEffect(() => {
     // Check current session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session) setView('dashboard');
+      const currentView = localStorage.getItem('cortexai_current_view');
+      if (session && (!currentView || currentView === 'home' || currentView === 'login')) {
+        setView('dashboard');
+      }
     });
 
-    // Listen for auth changes
+    // Listen for auth changes — only redirect on real sign-in, not on silent token refresh
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
-      if (session) {
-        setView('dashboard');
-      } else {
+      if (event === 'SIGNED_IN') {
+        const currentView = localStorage.getItem('cortexai_current_view');
+        if (!currentView || currentView === 'home' || currentView === 'login') {
+          setView('dashboard');
+        }
+      } else if (event === 'SIGNED_OUT') {
+        localStorage.removeItem('cortexai_current_view');
         setView('home');
       }
     });
@@ -121,7 +129,12 @@ const App = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    localStorage.setItem('cortexai_current_view', view);
+  }, [view]);
+
   const handleLogout = async () => {
+    localStorage.removeItem('cortexai_current_view');
     await supabase.auth.signOut();
     setView('home');
   };
@@ -151,6 +164,7 @@ const App = () => {
                   CortexAI
                 </div>
                 <div className="flex gap-4">
+                  <button onClick={() => setView('parent_dashboard')} className="font-bold text-sm uppercase tracking-wide text-slate-500 hover:text-black transition-colors px-4">Guardian Portal</button>
                   <button onClick={() => setView('login')} className="font-bold text-sm uppercase tracking-wide px-6 py-2 hover:text-matcha-600 transition-colors">Log In</button>
                   <button onClick={() => setView('signup')} className="font-bold text-sm uppercase tracking-wide border-2 border-black rounded-full px-6 py-2 hover:bg-lemon-400 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all">Sign Up</button>
                 </div>
@@ -213,7 +227,11 @@ const App = () => {
 
         {view === 'login' && (
           <motion.div key="login" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-            <Login onLogin={() => setView('dashboard')} onGoToSignUp={() => setView('signup')} onBack={() => setView('home')} />
+            <Login 
+              onLogin={() => setView('dashboard')} 
+              onSignUp={() => setView('signup')} 
+              onBack={(target) => setView(target || 'home')} 
+            />
           </motion.div>
         )}
 
@@ -254,13 +272,19 @@ const App = () => {
 
         {view === 'settings' && (
           <motion.div key="settings" initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -50 }}>
-            <SettingsPage onBack={() => setView('dashboard')} />
+            <SettingsPage onBack={() => setView('dashboard')} userStats={JSON.parse(localStorage.getItem('cortexai_userstats_v2') || '{}')} />
           </motion.div>
         )}
 
         {view === 'achievements' && (
           <motion.div key="achievements" initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -50 }}>
             <AchievementsPage onBack={() => setView('dashboard')} />
+          </motion.div>
+        )}
+
+        {view === 'parent_dashboard' && (
+          <motion.div key="parent_dashboard" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }}>
+            <ParentDashboard onBack={() => setView('login')} />
           </motion.div>
         )}
       </AnimatePresence>

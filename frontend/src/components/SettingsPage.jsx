@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const SettingsPage = ({ onBack }) => {
+const SettingsPage = ({ onBack, userStats }) => {
   const [activeSection, setActiveSection] = useState('profile');
   const [saveStatus, setSaveStatus] = useState(null);
   const [showResetModal, setShowResetModal] = useState(false);
@@ -128,6 +128,23 @@ const SettingsPage = ({ onBack }) => {
                          <input type="email" value={settings.email} onChange={(e) => setSettings({...settings, email: e.target.value})} className="w-full bg-stone-50 border-2 border-black p-5 rounded-2xl font-bold focus:shadow-[4px_4px_0px_0px_#078a52] outline-none transition-all" />
                       </div>
                    </div>
+
+                   <div className="mt-12 p-8 bg-indigo-50 border-2 border-indigo-200 rounded-[32px] flex items-center justify-between">
+                       <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-1">Student Access ID</p>
+                          <p className="text-2xl font-black text-indigo-900">1</p>
+                          <p className="text-[10px] font-bold text-indigo-400 mt-1">Give this number to your guardian — they type it in the Guardian Portal</p>
+                       </div>
+                       <button 
+                         onClick={() => {
+                           navigator.clipboard.writeText('1');
+                           alert('Student ID "1" copied! Your guardian should enter this in the Guardian Portal.');
+                         }}
+                         className="px-6 py-3 bg-white border-2 border-indigo-900 text-indigo-900 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-900 hover:text-white transition-all shadow-[4px_4px_0px_0px_#4338ca] active:shadow-none"
+                       >
+                         Copy Code
+                       </button>
+                    </div>
                 </div>
               </motion.div>
             )}
@@ -280,9 +297,9 @@ const SettingsPage = ({ onBack }) => {
               <motion.div key="data" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-10">
                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     {[
-                      { label: 'Total XP', value: '450', icon: 'stars' },
-                      { label: 'Completed Quests', value: '12', icon: 'task_alt' },
-                      { label: 'Active Days', value: '14', icon: 'calendar_today' }
+                      { label: 'Total XP', value: userStats?.xp || 0, icon: 'stars' },
+                      { label: 'Cortex Level', value: userStats?.level || 1, icon: 'task_alt' },
+                      { label: 'Active Streak', value: userStats?.streak || 0, icon: 'calendar_today' }
                     ].map(stat => (
                       <div key={stat.label} className="bg-white rounded-3xl border-2 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
                          <span className="material-symbols-outlined text-stone-300 mb-4">{stat.icon}</span>

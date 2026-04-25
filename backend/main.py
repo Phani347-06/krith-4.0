@@ -4,6 +4,8 @@ from routes.recommendation import router as recommendation_router
 from routes.parent_feedback import router as parent_router
 from routes.auth import router as auth_router
 from routes.questions import router as questions_router
+from routes.chat import router as chat_router
+from routes.rl import router as rl_router
 
 app = FastAPI()
 
@@ -22,7 +24,9 @@ def read_root():
 app.include_router(recommendation_router)
 app.include_router(parent_router)
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
-app.include_router(questions_router, tags=["questions"])
+app.include_router(questions_router, prefix="/api/questions", tags=["questions"])
+app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
+app.include_router(rl_router, prefix="/api/rl", tags=["rl"])
 
 if __name__ == "__main__":
     import uvicorn
