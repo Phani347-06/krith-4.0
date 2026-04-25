@@ -4,6 +4,7 @@ import { curriculumData as initialData } from '../data/curriculum';
 import LessonOverlay from './LessonOverlay';
 import SurvivalOverlay from './SurvivalOverlay';
 import ChatbotPanel from './ChatbotPanel';
+import { API_URL } from '../config';
 
 const XP_RULES = { mcq: 20, fill_blank: 30, coding: 50 };
 const calcModuleXP = (mod) =>
@@ -224,7 +225,7 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
   const fetchRLStats = async () => {
     try {
       const studentId = MOCK_PROFILES[currentProfile].id;
-      const res = await fetch(`http://localhost:8000/api/rl/student-progress/${studentId}`);
+      const res = await fetch(`${API_URL}/api/rl/student-progress/${studentId}`);
       if (res.ok) {
         const data = await res.json();
         setRlStats(data);
@@ -414,7 +415,7 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
 
     // 1. Sync XP and mastery to backend database (so Parent Dashboard shows real data)
     if (earnedXP > 0 || progressPercent > 0) {
-      fetch('http://localhost:8000/api/rl/log-xp', {
+      fetch(`${API_URL}/api/rl/log-xp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -585,7 +586,7 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
     setGeneratingModuleTitle(mod.title);
 
     try {
-      const res = await fetch('http://localhost:8000/api/questions/generate-lesson', {
+      const res = await fetch(`${API_URL}/api/questions/generate-lesson`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic: mod.title, difficulty: node.difficulty_level })

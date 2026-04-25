@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { API_URL } from '../config';
 
 const SettingsPage = ({ onBack, userStats }) => {
   const [activeSection, setActiveSection] = useState('profile');
@@ -347,7 +348,7 @@ const SettingsPage = ({ onBack, userStats }) => {
                    <button 
                       onClick={async () => {
                         try {
-                          await fetch('http://localhost:8000/api/rl/purge-progress/1', { method: 'POST' });
+                          await fetch(`${API_URL}/api/rl/purge-progress/1`, { method: 'POST' });
                         } catch (err) {
                           console.warn("Backend purge failed, clearing local data only.");
                         }

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
+import { API_URL } from '../config';
 
 const ChatbotPanel = ({ isOpen, onClose, userContext }) => {
   const [messages, setMessages] = useState([
@@ -29,7 +30,7 @@ const ChatbotPanel = ({ isOpen, onClose, userContext }) => {
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8000/api/chat', {
+      const response = await fetch(`${API_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { curriculumData } from '../data/curriculum';
+import { API_URL } from '../config';
 
 const ParentDashboard = ({ onBack }) => {
   const [connectedStudentId, setConnectedStudentId] = useState(() => {
@@ -34,7 +35,7 @@ const ParentDashboard = ({ onBack }) => {
     const fetchStats = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`http://localhost:8000/api/rl/student-progress/${connectedStudentId}`);
+        const res = await fetch(`${API_URL}/api/rl/student-progress/${connectedStudentId}`);
         if (res.ok) {
           const data = await res.json();
           setStudentStats(data);
@@ -52,7 +53,7 @@ const ParentDashboard = ({ onBack }) => {
     fetchStats();
 
     // Also fetch the real weekly activity for the chart
-    fetch(`http://localhost:8000/api/rl/weekly-activity/${connectedStudentId}`)
+    fetch(`${API_URL}/api/rl/weekly-activity/${connectedStudentId}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setWeeklyActivity(data); })
       .catch(() => {});

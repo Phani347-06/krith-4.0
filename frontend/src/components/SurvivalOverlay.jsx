@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import confetti from 'canvas-confetti';
 import SurvivalCompiler from './SurvivalCompiler';
+import { API_URL } from '../config';
 
 const SurvivalOverlay = ({ onClose, onXPUpdate, userStats }) => {
   const [stage, setStage] = useState('loading'); // 'loading', 'mission', 'quiz', 'feedback'
@@ -22,7 +23,7 @@ const SurvivalOverlay = ({ onClose, onXPUpdate, userStats }) => {
     setUserAnswer('');
 
     try {
-      const res = await fetch('http://localhost:8000/api/rl/next-action', {
+      const res = await fetch(`${API_URL}/api/rl/next-action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -86,7 +87,7 @@ const SurvivalOverlay = ({ onClose, onXPUpdate, userStats }) => {
     setStage('loading');
 
     try {
-      const res = await fetch('http://localhost:8000/api/rl/submit-answer', {
+      const res = await fetch(`${API_URL}/api/rl/submit-answer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

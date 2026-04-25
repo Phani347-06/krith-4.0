@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
+import { API_URL } from '../config';
 
 const SignUp = ({ onBack, onLogin, onSignUp }) => {
   const [email, setEmail] = useState('');
@@ -22,7 +23,7 @@ const SignUp = ({ onBack, onLogin, onSignUp }) => {
 
     try {
       // Use our custom backend to send a 6-digit OTP via Resend
-      const response = await fetch('http://localhost:8000/auth/send-otp', {
+      const response = await fetch(`${API_URL}/auth/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
@@ -49,7 +50,7 @@ const SignUp = ({ onBack, onLogin, onSignUp }) => {
 
     try {
       // 1. Verify the 6-digit OTP via our backend
-      const verifyRes = await fetch('http://localhost:8000/auth/verify-otp', {
+      const verifyRes = await fetch(`${API_URL}/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, code: otp }),
@@ -80,7 +81,7 @@ const SignUp = ({ onBack, onLogin, onSignUp }) => {
 
       // 3. Send the TFI-styled welcome email via backend
       try {
-        await fetch('http://localhost:8000/auth/welcome', {
+        await fetch(`${API_URL}/auth/welcome`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, username }),
