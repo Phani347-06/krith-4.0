@@ -433,7 +433,13 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
             }
             return n;
           });
-          // 3. Mark the original node as mastered if all its modules are now clear
+          // 3. Clear failures for the original node so it doesn't re-trigger
+          setFailedQuestions(prev => {
+            const newState = { ...prev };
+            delete newState[originalNodeId];
+            return newState;
+          });
+          // 4. Mark the original node as mastered if all its modules are now clear
           nextCurriculum = nextCurriculum.map(n => {
             if (n.id === originalNodeId) {
               const isMasteredNow = n.modules.every(m => newCompleted.has(`${originalNodeId}:${m.title}`));
