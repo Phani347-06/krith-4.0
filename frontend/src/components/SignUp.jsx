@@ -20,24 +20,24 @@ const SignUp = ({ onBack, onLogin }) => {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          username: username,
-          role: role,
-          school_id: schoolId
-        }
+    try {
+      // Use our custom backend to send a 6-digit OTP via Resend
+      const response = await fetch('http://localhost:8000/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setShowOtpInput(true);
+      } else {
+        setError(data.detail || "Failed to send verification code.");
       }
-    });
-
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-    } else {
-      // Switch to OTP verification view
-      setShowOtpInput(true);
+    } catch (err) {
+      setError("Server connection failed. Please ensure the backend is running.");
+    } finally {
       setLoading(false);
     }
   };
@@ -47,29 +47,56 @@ const SignUp = ({ onBack, onLogin }) => {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token: otp,
-      type: 'signup',
-    });
+    try {
+      // 1. Verify the 6-digit OTP via our backend
+      const verifyRes = await fetch('http://localhost:8000/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code: otp }),
+      });
 
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-    } else {
-      // Success! Send the welcome email via backend
+      const verifyData = await verifyRes.json();
+
+      if (!verifyRes.ok) {
+        throw new Error(verifyData.detail || "Invalid verification code.");
+      }
+
+      // 2. OTP verified! Now create the user in Supabase
+      const { error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            username: username,
+            role: role,
+            school_id: schoolId
+          }
+        }
+      });
+
+      if (signUpError) {
+        throw new Error(signUpError.message);
+      }
+
+      // 3. Send the TFI-styled welcome email via backend
       try {
-        await fetch('http://127.0.0.1:8000/auth/welcome', {
+        await fetch('http://localhost:8000/auth/welcome', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, username }),
         });
       } catch (e) {
-        console.error("Failed to trigger welcome email:", e);
+        console.error("Welcome email failed:", e);
       }
       
       setLoading(false);
+      // Success! Move to next state (e.g., login or dashboard)
       if (onSignUp) onSignUp();
+      else if (onLogin) onLogin();
+      
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
     }
   };
 
