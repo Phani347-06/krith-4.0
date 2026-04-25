@@ -40,6 +40,8 @@ def generate_feedback(strengths, weaknesses, recommendation):
         print(f"Error generating feedback with Groq: {e}")
         return "Keep pushing forward! Your mastery path is looking strong."
 
+import json
+
 def chat_with_agent(messages, user_context=None):
     """
     Handles a multi-turn conversation with the user.
@@ -52,6 +54,17 @@ def chat_with_agent(messages, user_context=None):
     2. If the user asks about off-topic subjects (e.g., politics, movies, general trivia), politely but firmly refuse to answer and redirect them back to their coding quests.
     3. DO NOT write full code solutions for the user. Instead, provide hints, pseudo-code, and explanations to guide them to the answer.
     4. Keep all responses very concise (under 4 sentences if possible) and format code snippets neatly.
+    
+    IMPORTANT: You must ALWAYS respond with a raw JSON object. Do not include markdown formatting or extra text outside the JSON.
+    The JSON must follow this exact structure:
+    {
+        "reply": "Your conversational response to the user here.",
+        "rl_insight": {
+            "detected_topic_id": 0, // Integer 1-9 (1:Variables, 2:Conditions, 3:Loops, 4:Functions, 5:Data Structures, 6:Recursion, 7:Frontend, 8:SQL, 9:AI/ML). Use 0 if the conversation is general and no specific topic is discussed.
+            "sentiment": "neutral", // Can be "struggle", "strength", or "neutral" based on how well they understand the topic.
+            "mastery_delta": 0.0 // A float value: use -0.05 for struggle, 0.05 for strength, and 0.0 for neutral.
+        }
+    }
     """
     
     if user_context:
@@ -80,11 +93,17 @@ def chat_with_agent(messages, user_context=None):
             messages=[system_prompt] + messages,
             temperature=0.7,
             max_tokens=1024,
+            response_format={"type": "json_object"}
         )
-        return completion.choices[0].message.content
+        
+        raw_response = completion.choices[0].message.content
+        return json.loads(raw_response)
     except Exception as e:
         print(f"Chat error: {e}")
-        return "Warning: Core logic offline. Please try again in a moment."
+        return {
+            "reply": "Warning: Core logic offline. Please try again in a moment.",
+            "rl_insight": None
+        }
 
 def generate_survival_mission(topic: str, action: str, question_text: str):
     """
