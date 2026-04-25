@@ -337,13 +337,7 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
                 title: `Review Chat Concepts: ${coreNode.topic_name}`,
                 description: `Krith noticed you asked about ${coreNode.topic_name}. Complete this quick revision to strengthen your neural pathways!`,
                 theory: `### CHATBOT RECALIBRATION\n\nYour recent conversations with Krith indicated a drop in your neural resonance for **${coreNode.topic_name}**.\n\nTake a deep breath and review the core principles before jumping back into the main track.`,
-                questions: [{
-                  type: "mcq",
-                  question: `You recently asked Krith about ${coreNode.topic_name}. Are you ready to review the core concepts?`,
-                  options: ["Yes, let's recalibrate!", "Not yet"],
-                  correct: 0,
-                  explanation: "Recalibration initiated."
-                }]
+                questions: coreNode.modules.flatMap(m => m.questions || []).slice(0, 3)
               }]
             };
             
