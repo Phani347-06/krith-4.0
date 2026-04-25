@@ -397,7 +397,7 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
           status: 'in_progress',
           progress: 0,
           xp_reward: 50,
-          position: { x: node.position.x + 300, y: node.position.y - 150 },
+          position: { x: node.position.x + 800, y: node.position.y },
           prerequisite_topic_id: nodeId,
           modules: [{
             title: `Fix Mistakes: ${moduleTitle}`,
