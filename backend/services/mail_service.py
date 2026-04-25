@@ -13,7 +13,7 @@ def send_email(to_email, subject, html_content):
     """
     try:
         params = {
-            "from": "CortexAI <onboarding@resend.dev>",
+            "from": "CortexAI <onboarding@coolie.me>",
             "to": [to_email],
             "subject": subject,
             "html": html_content,
