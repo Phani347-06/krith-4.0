@@ -427,7 +427,7 @@ const Dashboard = ({ onLogout, onViewStats, onViewSettings, onViewAchievements, 
           student_id: 1,
           xp_earned: earnedXP,
           source: 'lesson',
-          topic_id: nodeId,
+          topic_id: nodeId >= 1000 ? nodeId - 1000 : nodeId,
           mastery_score: progressPercent
         })
       }).catch(err => console.warn('Sync to DB failed:', err));
